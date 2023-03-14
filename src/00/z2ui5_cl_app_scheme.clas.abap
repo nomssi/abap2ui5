@@ -31,8 +31,6 @@ CLASS z2ui5_cl_app_scheme DEFINITION
 
   PRIVATE SECTION.
 
-    METHODS formatter IMPORTING iv_text       TYPE string
-                      RETURNING VALUE(result) TYPE string.
     METHODS reset.
     METHODS refresh.
     METHODS init_console.
@@ -44,16 +42,9 @@ ENDCLASS.
 
 CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
 
-
-  METHOD formatter.
-    result = escape( val    = iv_text
-                     format = cl_abap_format=>e_json_string ).
-  ENDMETHOD.
-
-
   METHOD format_all.
-    screen-console_area = formatter( screen-log ).
-    screen-output_area = formatter( screen-output ).
+    screen-console_area = screen-log.
+    screen-output_area = screen-output.
   ENDMETHOD.
 
 
@@ -157,9 +148,7 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
             DATA(response) = repl( screen-code_area ).
             format_all( ).
             reset( ).
-
-          WHEN 'BUTTON_BACK'.
-            client->nav_to_app( client->get_app_previous( ) ).
+            client->set( focus = screen-console_area page_scroll_pos = '99999999' ).
 
         ENDCASE.
 

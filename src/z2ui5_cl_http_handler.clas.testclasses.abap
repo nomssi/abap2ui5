@@ -1,3 +1,5 @@
+*"* use this source file for your ABAP unit test classes
+
 CLASS z2ui5_lcl_unit_test DEFINITION FINAL FOR TESTING
   DURATION SHORT
   RISK LEVEL HARMLESS.
