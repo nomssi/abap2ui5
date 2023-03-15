@@ -1306,25 +1306,27 @@ CLASS z2ui5_lcl_if_view IMPLEMENTATION.
       ASSIGN (lv_name) TO <attribute>.
       _=>raise( when = xsdbool( sy-subrc <> 0 ) v = 'CX_SY_SUBRC' ).
 
+      DATA lv_attribute TYPE string.
       CASE lr_attri->type_kind.
 
         WHEN 'g' OR 'D' OR 'P' OR 'T' OR 'C'.
-
-          lo_actual->add_attribute( n = lr_attri->name
-                                    v = _=>get_abap_2_json( <attribute> )
-                                    apos_active = abap_false ).
+          lv_attribute = _=>get_abap_2_json( <attribute> ).
 
         WHEN 'I'.
-          lo_actual->add_attribute( n = lr_attri->name
-                                    v = CONV string( <attribute> )
-                                    apos_active = abap_false ).
+          lv_attribute = CONV string( <attribute> ).
 
         WHEN 'h'.
-          lo_actual->add_attribute( n = lr_attri->name
-                                    v = _=>trans_any_2_json( <attribute> )
-                                    apos_active = abap_false ).
+          lv_attribute = _=>trans_any_2_json( <attribute> ).
+
+        WHEN OTHERS.
+          CONTINUE.
 
       ENDCASE.
+
+      lo_actual->add_attribute( n = lr_attri->name
+                                v = lv_attribute
+                                apos_active = abap_false ).
+
     ENDLOOP.
 
     IF lo_update->mt_values IS INITIAL.
