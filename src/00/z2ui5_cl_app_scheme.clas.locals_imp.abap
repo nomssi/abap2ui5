@@ -491,6 +491,15 @@
     ENDMETHOD.
 
     METHOD gcd.
+    " Calculates the greatest common divisor (GCD) of two numbers.
+    " Parameters:
+    "   n      : numerator, first number (type numeric)
+    "   d      : denominator, second number (type numeric)
+    " Exceptions:
+    "   lcx_lisp_exception : if an error occurs during the calculation
+    " Returns:
+    "   result : the greatest common divisor (type tv_int)
+
       DATA num TYPE tv_int.
       DATA den TYPE tv_int.
       DATA lv_save TYPE tv_int.
