@@ -42,6 +42,7 @@ ENDCLASS.
 
 CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
 
+
   METHOD format_all.
     screen-console_area = screen-log.
     screen-output_area = screen-output.
@@ -129,13 +130,16 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
 
         CASE client->get( )-event.
 
+          WHEN 'BACK'.
+            client->nav_app_leave( client->get( )-id_prev_app_stack ).
+
           WHEN 'DB_LOAD'.
             " screen-code_area
-            client->display_message_toast( 'Download successfull' ).
+            client->popup_message_toast( 'Download successfull' ).
 
           WHEN 'DB_SAVE'.
             "lcl_mime_api=>save_data( ).
-            client->display_message_box( text = 'Upload successfull. File saved!' type = 'success' ).
+            client->popup_message_box( text = 'Upload successfull. File saved!' type = 'success' ).
 
           WHEN 'BUTTON_RESET'.
             refresh_scheme( ).
@@ -148,7 +152,9 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
             DATA(response) = repl( screen-code_area ).
             format_all( ).
             reset( ).
-            client->set( focus = screen-console_area page_scroll_pos = '99999999' ).
+            client->set( focus = screen-console_area
+                         focus_pos = '99999999'
+                         page_scroll_pos = 99999999 ).
 
         ENDCASE.
 
@@ -156,8 +162,8 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
       WHEN client->cs-lifecycle_method-on_rendering.
 
         DATA(view) = client->factory_view( 'SCHEME_INPUT' ).
-        DATA(page) = view->page( title = 'abapScheme - UI5 Workbench'
-                                 nav_button_tap = view->_event_display_id( client->get( )-id_prev_app ) ).
+        DATA(page) = view->page( title = 'abapScheme - Workbench'
+                                 nav_button_tap = view->_event( 'BACK' ) ).
 
         page->header_content( )->overflow_toolbar(
             )->button(
