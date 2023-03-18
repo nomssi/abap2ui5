@@ -106,6 +106,7 @@ INTERFACE z2ui5_if_view
 
   METHODS input
     IMPORTING
+      id               type clike optional
       value            TYPE clike OPTIONAL
       placeholder      TYPE clike OPTIONAL
       type             TYPE clike OPTIONAL
@@ -161,12 +162,13 @@ INTERFACE z2ui5_if_view
 
   METHODS table
     IMPORTING
-      items            TYPE clike OPTIONAL
-      growing          TYPE clike OPTIONAL
-      growingThreshold TYPE clike OPTIONAL
-      headerText       TYPE clike OPTIONAL
-      sticky           TYPE clike OPTIONAL
-      mode             TYPE clike OPTIONAL
+      items               TYPE clike OPTIONAL
+      growing             TYPE clike OPTIONAL
+      growingThreshold    TYPE clike OPTIONAL
+      growingScrollToLoad TYPE clike OPTIONAL
+      headerText          TYPE clike OPTIONAL
+      sticky              TYPE clike OPTIONAL
+      mode                TYPE clike OPTIONAL
         PREFERRED PARAMETER items
     RETURNING
       VALUE(result)    TYPE REF TO z2ui5_if_view.
