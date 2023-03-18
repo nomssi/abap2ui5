@@ -152,18 +152,19 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
             DATA(response) = repl( screen-code_area ).
             format_all( ).
             reset( ).
-            client->set( focus = screen-console_area
-                         focus_pos = '99999999'
-                         page_scroll_pos = 99999999 ).
+            client->set( focus = screen-console_area focus_pos = '9999999' ).
+            client->set( page_scroll_pos = '99999999' ).
 
         ENDCASE.
+
 
 
       WHEN client->cs-lifecycle_method-on_rendering.
 
         DATA(view) = client->factory_view( 'SCHEME_INPUT' ).
-        DATA(page) = view->page( title = 'abapScheme - Workbench'
-                                 nav_button_tap = view->_event( 'BACK' ) ).
+        DATA(page) = view->page( id = 'id_page'
+                                 title = 'abapScheme - Workbench'
+                                 navbuttontap = view->_event( 'BACK' ) ).
 
         page->header_content( )->overflow_toolbar(
             )->button(
@@ -196,6 +197,8 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
                             height = '200px'
             ")->label( text = 'Output'
             )->text_area( value = view->_bind( screen-output_area )
+                          id = 'id_text'
+                          width = '100%'
                           height = '200px' ).
 
         grid->simple_form( 'Input' )->content( 'f'
