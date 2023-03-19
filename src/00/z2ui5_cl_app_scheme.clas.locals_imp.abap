@@ -21,7 +21,7 @@
 *&---------------------------------------------------------------------*
 *  The MIT License (MIT)
 *
-*  Copyright (c) 2018, 2020 Jacques Nomssi Nzali
+*  Copyright (c) 2018, 2020, 2023 Jacques Nomssi Nzali
 *  Copyright (c) 2015 Martin Ceronio
 *
 *  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -41,37 +41,6 @@
 *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 *  THE SOFTWARE.
-
-  CLASS lcl_demo_output DEFINITION.
-    PUBLIC SECTION.
-      METHODS constructor IMPORTING out TYPE REF TO if_oo_adt_classrun_out.
-      METHODS write IMPORTING iv_text TYPE any.
-      METHODS display.
-      METHODS begin_section IMPORTING iv_text TYPE any.
-    PRIVATE SECTION.
-      DATA out TYPE REF TO if_oo_adt_classrun_out.
-  ENDCLASS.
-
-  CLASS lcl_demo_output IMPLEMENTATION.
-
-    METHOD constructor.
-      me->out = out.
-    ENDMETHOD.
-
-    METHOD write.
-      out->write( iv_text ).
-    ENDMETHOD.
-
-    METHOD begin_section.
-      out->write( iv_text ).
-    ENDMETHOD.
-
-    METHOD display.
-      "out->write( ).
-      RETURN.
-    ENDMETHOD.
-
-  ENDCLASS.
 
 *--------------------------------------------------------------------*
 * EXCEPTIONS
@@ -3215,8 +3184,8 @@
     ENDMETHOD.
 
     METHOD parse.
-*     Entry point for parsing code. This is not thread-safe, but as an ABAP
-*     process does not have the concept of threads, we are safe :-)
+      " Entry point for parsing code. This is not thread-safe, but as an ABAP
+      " process does not have the concept of threads, we are safe :-)
       code = iv_code.
       length = strlen( code ).
 
@@ -3260,7 +3229,7 @@
       DATA lv_empty_list TYPE abap_boolean VALUE abap_true.
       DATA lv_proper_list TYPE abap_boolean VALUE abap_true.
 
-*     Set pointer to start of list
+      " Set pointer to start of list
       result = lo_cell = lcl_lisp_new=>cons( ).
       DATA(lv_close_delim) = SWITCH #( delim WHEN c_open_bracket THEN c_close_bracket
                                              WHEN c_open_curly THEN c_close_curly
@@ -3287,7 +3256,7 @@
         ENDCASE.
 
         IF lv_proper_list EQ abap_false.
-*         inconsistent input
+          " inconsistent input
           throw( `dotted pair` ).
         ENDIF.
 
@@ -3297,7 +3266,7 @@
           lo_cell->car = parse_token( ).
 
         ELSE.  " lv_empty_list = abap_false.
-*         On at least the second item; add new cell and move pointer
+          " On at least the second item; add new cell and move pointer
 
           DATA(lo_peek) = parse_token( ).
 
@@ -3396,7 +3365,7 @@
     ENDMETHOD.                    "match_string
 
     METHOD skip_label.
-*     Skip if match was successful
+      " Skip if match was successful
       next_char( ).                 " Skip past hash
       WHILE index < length AND char CO c_decimal_digits.
         next_char( ).
@@ -3443,7 +3412,7 @@
       DATA sval TYPE string.
 
       skip_whitespace( ).
-*     create object cell.
+      " create object cell.
       CASE char.
         WHEN c_open_paren OR c_open_bracket OR c_open_curly.
           element = parse_list( char ).
@@ -3590,15 +3559,15 @@
               RETURN.
 
             WHEN OTHERS.
-*             Boolean #t #f
+              " Boolean #t #f
               "will be handled in match_atom( )
 
               IF peek_bytevector( ).
-**               Bytevector constant #u8( ... )
-*
+                "  Bytevector constant #u8( ... )
+
               ENDIF.
 
-*             Referencing other literal data #<n>= #<n>#
+              " Referencing other literal data #<n>= #<n>#
               DATA lv_label TYPE string.
               IF match_label( EXPORTING iv_limit = c_lisp_equal
                               IMPORTING ev_label = lv_label ).
@@ -3610,7 +3579,7 @@
                 RETURN.
               ELSEIF match_label( EXPORTING iv_limit = c_lisp_hash
                                   IMPORTING ev_label = lv_label ).
-*               Reference to datum
+                " Reference to datum
                 element = lcl_lisp_new=>symbol( |#{ lv_label }#| ).
                 RETURN.
               ENDIF.
@@ -3618,7 +3587,7 @@
           ENDCASE.
 
       ENDCASE.
-*     Others
+      " Others
       match_atom( CHANGING cv_val = sval ).
       element = lcl_lisp_new=>atom( sval ).
     ENDMETHOD.                    "parse_token
@@ -3656,7 +3625,7 @@
     METHOD bind_symbol.
       DATA lv_symbol TYPE string.
       DATA lo_params TYPE REF TO lcl_lisp.
-*     Scheme does not return a value for define; but we are returning the new symbol reference
+      " Scheme does not return a value for define; but we are returning the new symbol reference
       DATA(lo_head) = element->car.
       CASE lo_head->type.
         WHEN symbol.
@@ -3781,9 +3750,9 @@
     ENDMETHOD.                    "re_assign_symbol
 
     METHOD evaluate_parameters.
-*     This routine is called very, very often!
+      " This routine is called very, very often!
       DATA lo_arg TYPE REF TO lcl_lisp.
-*     Before execution of the procedure or lambda, all parameters must be evaluated
+      " Before execution of the procedure or lambda, all parameters must be evaluated
       IF io_list IS NOT BOUND.
         lcl_lisp=>throw( c_error_incorrect_input ).
       ENDIF.
@@ -5367,7 +5336,9 @@
     ENDMETHOD.                    "eval_source
 
     METHOD eval_repl.
-      LOOP AT parse( code ) INTO DATA(lo_element).
+      DATA(lt_elem) = parse( code ).
+
+      LOOP AT lt_elem INTO DATA(lo_element).
         DATA(lo_result) = eval( element = lo_element
                                 environment = env ).
         gi_log->put( lo_result ).

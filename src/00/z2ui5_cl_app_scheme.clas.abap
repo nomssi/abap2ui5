@@ -3,11 +3,14 @@ CLASS z2ui5_cl_app_scheme DEFINITION
   CREATE PUBLIC .
 
   PUBLIC SECTION.
-
+" creates a UI5 application that allows the user to enter Lisp expressions and evaluate them
+" (REPL = Read Eval Print Loop). The UI has a code editor, an input area, a console area (not used yet),
+" and an output area.
+" User events such as button clicks are used to UI in response to the user's actions.
     INTERFACES z2ui5_if_app .
 
     DATA:
-      BEGIN OF screen,
+      BEGIN OF screen, " Store the state of the class, to be passed between the methods
         check_initialized TYPE abap_bool,
         check_is_active   TYPE abap_bool,
         code_area         TYPE string,
@@ -21,6 +24,8 @@ CLASS z2ui5_cl_app_scheme DEFINITION
         output TYPE string,
 
         port TYPE REF TO object,
+        input_port TYPE REF TO object,
+        output_port TYPE REF TO object,
         interpreter TYPE REF TO if_serializable_object,
         environment TYPE REF TO if_serializable_object,
       END OF screen.
@@ -28,10 +33,13 @@ CLASS z2ui5_cl_app_scheme DEFINITION
     METHODS init.
     METHODS refresh_scheme.
     METHODS format_all.
-
+    METHODS sample_code RETURNING VALUE(result) TYPE string.
   PRIVATE SECTION.
 
     METHODS reset.
+    METHODS sample_code1 RETURNING VALUE(result) TYPE string.
+    METHODS sample_code2 RETURNING VALUE(result) TYPE string.
+    METHODS sample_code3 RETURNING VALUE(result) TYPE string.
     METHODS refresh.
     METHODS init_console.
     METHODS repl IMPORTING code TYPE string
@@ -60,12 +68,13 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
     CLEAR screen.
     screen-check_is_active = abap_true.
     refresh_scheme( ).
-    screen-code_area = `(+ 1 3 4 4)`.
+    screen-code_area = sample_code( ).
   ENDMETHOD.
 
 
   METHOD refresh.
     DATA lo_port TYPE REF TO lcl_lisp_buffered_port.
+    DATA lo_output_port TYPE REF TO lcl_lisp_buffered_port.
     DATA lo_int TYPE REF TO lcl_lisp_profiler.
     lo_port ?= lcl_lisp_new=>port( iv_port_type = textual
                                    iv_input     = abap_true
@@ -73,6 +82,12 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
                                    iv_error     = abap_true
                                    iv_buffered  = abap_true ).
     screen-port = lo_port.
+    lo_output_port ?= lcl_lisp_new=>port( iv_port_type = textual
+                                          iv_input     = abap_false
+                                          iv_output    = abap_true
+                                          iv_error     = abap_true
+                                          iv_buffered  = abap_true ).
+    screen-output_port = lo_output_port.
     lo_int = lcl_lisp_profiler=>new_profiler( io_port = lo_port
                                               ii_log = lo_port
                                               io_env = screen-environment ).
@@ -84,20 +99,23 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
   METHOD refresh_scheme.
     refresh( ).
     reset( ).
-    screen-output = |==> Welcome to ABAP List Processing!\n|.
-    screen-log = |==> ABAP Lisp -- Console { sy-uname } -- { sy-datlo DATE = ENVIRONMENT } { sy-uzeit TIME = ENVIRONMENT }\n|.
+    screen-output = |==> ABAP List Processing Output!\n|.
+    screen-log = |==> ABAP Scheme -- Console { sy-uname } -- { sy-datlo DATE = ENVIRONMENT } { sy-uzeit TIME = ENVIRONMENT }\n|.
     format_all( ).
   ENDMETHOD.
 
 
   METHOD repl.
-    DATA output TYPE string.
+    " evaluates the Scheme expression entered in the code area
     DATA lo_int TYPE REF TO lcl_lisp_profiler. "The Lisp interpreter.
     DATA lo_port TYPE REF TO lcl_lisp_buffered_port.
+    DATA lo_output_port TYPE REF TO lcl_lisp_buffered_port.
+    DATA output TYPE string.
 
     TRY.
         lo_port ?= screen-port.
-        lo_int = lcl_lisp_profiler=>new_profiler( io_port = lo_port
+        lo_output_port ?= screen-output_port.
+        lo_int = lcl_lisp_profiler=>new_profiler( io_port = lo_output_port
                                                   ii_log = lo_port
                                                   io_env = screen-environment ).
         response = lo_int->eval_repl( EXPORTING code = code
@@ -109,13 +127,53 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
 
     ENDTRY.
 
-    screen-output &&= output.
+    screen-output &&= output && |\n|.
     screen-log &&= |{ code }\n=> { response }\n|.
   ENDMETHOD.
 
 
   METHOD reset.
     CLEAR screen-code_area.
+  ENDMETHOD.
+
+  METHOD sample_code.
+    CONSTANTS c_max_index TYPE i VALUE 3.
+
+    DATA(random) = cl_abap_random=>create( seed = 42 ).
+    DATA(index) = random->intinrange( low = 1 high = c_max_index ).
+
+    CASE index.
+      WHEN 1.
+        result = sample_code3( ).
+      WHEN 2.
+        result = sample_code2( ).
+      WHEN OTHERS.
+        result = sample_code1( ).
+    ENDCASE.
+  ENDMETHOD.
+
+  METHOD sample_code1.
+    result = `(+ 1 3 4 4)`.
+  ENDMETHOD.
+
+  METHOD sample_code2.
+    result = `(list-ref (list "hop" "skip" "jump") 0)    ; extract by position. Index starts with 0`.
+  ENDMETHOD.
+
+  METHOD sample_code3.
+    result =    `;; https://see.stanford.edu/materials/icsppcs107/30-Scheme-Functions.pdf` &&
+                `;; Predicate function: _leap-year?_ Lap year check` &&
+                `;; -----------------------------------------------` &&
+                `;; Illustrates the use of the 'or, 'and, and 'not special forms. The question mark after the` &&
+                `;; function name isn't required, it's just customary to include a question mark at the end` &&
+                `;; of a function that returns a true or false.` &&
+                `;;` &&
+                `;; A year is a leap year if it's divisible by 400, or if it's divisible by 4 but not by 100.` &&
+                `;;` &&
+                `(define (leap-year? year)` &&
+                `  (or (and (zero? (remainder year 4))` &&
+                `  (not (zero? (remainder year 100))))` &&
+                `  (zero? (remainder year 400))))`.
   ENDMETHOD.
 
 
@@ -152,8 +210,12 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
             DATA(response) = repl( screen-code_area ).
             format_all( ).
             reset( ).
-            client->set( focus = screen-console_area focus_pos = '9999999' ).
-            client->set( page_scroll_pos = '99999999' ).
+*            client->set( s_cursor_pos = VALUE #( id = 'id_console'
+*                                                 cursorpos = '999999'
+*                                                 selectionstart = '99999'
+*                                                 selectionend = '999999' ) ).
+            client->set( t_scroll_pos = VALUE #( ( n = 'id_console' v = '99999' )
+                                                 ( n = 'id_output' v = '99999' ) ) ).
 
         ENDCASE.
 
@@ -190,21 +252,32 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
 
         DATA(grid) = page->grid( 'L12 M12 S12' )->content( 'l' ).
 
-        grid->simple_form(  'Scheme Editor' )->content( 'f'
+        grid->simple_form(  'Code Editor' )->content( 'f'
             )->code_editor( value = view->_bind( screen-code_area )
                             type = 'scheme'
                             editable = abap_true
-                            height = '200px'
-            ")->label( text = 'Output'
-            )->text_area( value = view->_bind( screen-output_area )
-                          id = 'id_text'
-                          width = '100%'
-                          height = '200px' ).
+                            height = '200px' ).
 
-        grid->simple_form( 'Input' )->content( 'f'
-          )->input( view->_bind( screen-input_area )  ).
+
+
+        grid->simple_form( )->content( 'f'
+            )->text_area( value = view->_bind( screen-output_area )
+                          id = 'id_output'
+                          width = '100%'
+                          height = '200px'
+           )->hbox(
+           )->flex_box( class = 'rows'
+            )->label( text = 'Scheme Input'
+            )->input( id = 'id_input'
+                      placeholder = '...'
+                      value = view->_bind( screen-input_area )
+            )->button( press = view->_event( 'BUTTON_ENTER' )
+                       icon = 'sap-icon://accept' ).
+
         grid->simple_form( 'Console' )->content( 'f'
           )->text_area( value = view->_bind( screen-console_area )
+                        id = 'id_console'
+                        width = '100%'
                         height = '200px' ).
 
     ENDCASE.
