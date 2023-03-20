@@ -28,12 +28,16 @@ CLASS z2ui5_cl_app_scheme DEFINITION
         output_port TYPE REF TO object,
         interpreter TYPE REF TO if_serializable_object,
         environment TYPE REF TO if_serializable_object,
+        code_stack TYPE string_table,
+        stack TYPE REF TO object,
       END OF screen.
   PROTECTED SECTION.
     METHODS init.
     METHODS refresh_scheme.
     METHODS format_all.
     METHODS sample_code RETURNING VALUE(result) TYPE string.
+    METHODS view_popup_input IMPORTING i_descr TYPE string
+                                       i_client TYPE REF TO z2ui5_if_client.
   PRIVATE SECTION.
 
     METHODS reset.
@@ -76,6 +80,8 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
     DATA lo_port TYPE REF TO lcl_lisp_buffered_port.
     DATA lo_output_port TYPE REF TO lcl_lisp_buffered_port.
     DATA lo_int TYPE REF TO lcl_lisp_profiler.
+    DATA lo_stack TYPE REF TO lcl_stack.
+
     lo_port ?= lcl_lisp_new=>port( iv_port_type = textual
                                    iv_input     = abap_true
                                    iv_output    = abap_true
@@ -91,8 +97,10 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
     lo_int = lcl_lisp_profiler=>new_profiler( io_port = lo_port
                                               ii_log = lo_port
                                               io_env = screen-environment ).
+    lo_stack = NEW #( screen-code_stack ).
     screen-interpreter ?= lo_int.
     screen-environment ?= lo_int->env.
+    screen-stack ?= lo_stack.
   ENDMETHOD.
 
 
@@ -133,6 +141,7 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
 
 
   METHOD reset.
+    CAST lcl_stack( screen-stack )->push( screen-code_area ).
     CLEAR screen-code_area.
   ENDMETHOD.
 
@@ -176,6 +185,31 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
                 `  (zero? (remainder year 400))))`.
   ENDMETHOD.
 
+  METHOD view_popup_input.
+
+    DATA(view) = i_client->factory_view( 'POPUP_TO_INPUT' ).
+    DATA(popup) = view->dialog(
+                    contentheight = '500px'
+                    contentwidth  = '500px'
+                    title = 'Scheme Input Dialog' ).
+
+    popup->content(
+        )->simple_form(
+        )->label( i_descr
+        )->input(  view->_bind( screen-input_area ) ).
+
+    popup->footer( )->overflow_toolbar(
+          )->toolbar_spacer(
+          )->button(
+              text  = 'Cancel'
+              press = view->_event( 'BUTTON_TEXTAREA_CANCEL' )
+          )->button(
+              text  = 'Confirm'
+              press = view->_event( 'BUTTON_TEXTAREA_CONFIRM' )
+              type  = 'Emphasized' ).
+
+  ENDMETHOD.
+
 
   METHOD z2ui5_if_app~controller.
 
@@ -202,6 +236,12 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
           WHEN 'BUTTON_RESET'.
             refresh_scheme( ).
 
+          WHEN 'BUTTON_PREV'.
+            screen-code_area = CAST lcl_stack( screen-stack )->previous( ).
+
+          WHEN 'BUTTON_NEXT'.
+            screen-code_area = CAST lcl_stack( screen-stack )->next( ).
+
           WHEN 'BUTTON_TRACE'.
 
           WHEN 'BUTTON_SEXP'.
@@ -210,10 +250,6 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
             DATA(response) = repl( screen-code_area ).
             format_all( ).
             reset( ).
-*            client->set( s_cursor_pos = VALUE #( id = 'id_console'
-*                                                 cursorpos = '999999'
-*                                                 selectionstart = '99999'
-*                                                 selectionend = '999999' ) ).
             client->set( t_scroll_pos = VALUE #( ( n = 'id_console' v = '99999' )
                                                  ( n = 'id_output' v = '99999' ) ) ).
 
@@ -232,23 +268,26 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
             )->button(
                 text  = 'Evaluate'
                 press = view->_event( 'BUTTON_EVAL' )
-                icon = 'sap-icon://simulate'
+                icon = 'sap-icon://initiative'
             )->toolbar_spacer(
-            )->button( text = 'Trace' press = view->_event( 'BUTTON_TRACE' )
-                        "icon = 'sap-icon://save'
             )->button( text = 'S-Expression' press = view->_event( 'BUTTON_SEXP' )
                        icon = 'sap-icon://tree'
-            )->link( text = 'Help' href = 'https://github.com/nomssi/abap_scheme/wiki'
+            )->button( text = 'Trace' press = view->_event( 'BUTTON_TRACE' )
+                        "icon = 'sap-icon://save'
+            )->button(
+                 text = 'Previous'
+                 press = view->_event( 'BUTTON_PREV' )
+                 icon  = 'sap-icon://sys-prev-page'
+            )->button(
+                 text = 'Next'
+                 press = view->_event( 'BUTTON_NEXT' )
+                 icon  = 'sap-icon://sys-next-page'
+            )->link( text = 'Help on..' href = 'https://github.com/nomssi/abap_scheme/wiki'
+                     "icon  = 'sap-icon://learning-assistant'
             )->button(
                  text = 'Refresh'
                  press = view->_event( 'BUTTON_RESET' )
-                 icon  = 'sap-icon://delete'
-            )->button(
-                text  = 'Upload'
-                press = view->_event( 'DB_SAVE' )
-                type  = 'Emphasized'
-                icon = 'sap-icon://save'
-                enabled = abap_true ).
+                 icon  = 'sap-icon://delete' ).
 
         DATA(grid) = page->grid( 'L12 M12 S12' )->content( 'l' ).
 
@@ -258,21 +297,11 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
                             editable = abap_true
                             height = '200px' ).
 
-
-
         grid->simple_form( )->content( 'f'
             )->text_area( value = view->_bind( screen-output_area )
                           id = 'id_output'
                           width = '100%'
-                          height = '200px'
-           )->hbox(
-           )->flex_box( class = 'rows'
-            )->label( text = 'Scheme Input'
-            )->input( id = 'id_input'
-                      placeholder = '...'
-                      value = view->_bind( screen-input_area )
-            )->button( press = view->_event( 'BUTTON_ENTER' )
-                       icon = 'sap-icon://accept' ).
+                          height = '200px' ).
 
         grid->simple_form( 'Console' )->content( 'f'
           )->text_area( value = view->_bind( screen-console_area )
@@ -280,6 +309,8 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
                         width = '100%'
                         height = '200px' ).
 
+       view_popup_input( i_descr = 'Input'
+                         i_client = client ).
     ENDCASE.
   ENDMETHOD.
 ENDCLASS.

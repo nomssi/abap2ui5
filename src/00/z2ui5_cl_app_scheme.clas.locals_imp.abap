@@ -1876,6 +1876,7 @@
     ENDMETHOD.
 
     METHOD read_stream.
+      "client->view_popup( 'POPUP_TO_INPUT' ).
       rv_input = out->get( name = iv_title ).
     ENDMETHOD.
 
@@ -17267,3 +17268,58 @@
     ENDMETHOD.
 
   ENDCLASS.
+
+CLASS lcl_stack DEFINITION.
+  PUBLIC SECTION.
+    INTERFACES if_serializable_object.
+    TYPES tv_data TYPE string.
+
+    METHODS constructor IMPORTING it_stack TYPE string_table OPTIONAL.
+    METHODS previous RETURNING VALUE(rv_data) TYPE tv_data.
+    METHODS next RETURNING VALUE(rv_data) TYPE tv_data.
+
+    METHODS push IMPORTING iv_key TYPE tv_data.
+
+    METHODS serialize RETURNING VALUE(rt_string) TYPE string_table.
+    METHODS deserialize IMPORTING it_string      TYPE string_table.
+  PROTECTED SECTION.
+    DATA mt_stack TYPE string_table.
+    DATA mv_index TYPE i.
+ENDCLASS.
+
+CLASS lcl_stack IMPLEMENTATION.
+
+  METHOD constructor.
+    mt_stack = it_stack.
+  ENDMETHOD.
+
+  METHOD push.
+    CHECK iv_key IS NOT INITIAL.
+    APPEND iv_key TO mt_stack.
+    mv_index = lines( mt_stack ).
+  ENDMETHOD.
+
+  METHOD previous.
+    IF mv_index GT 1.
+      mv_index -= 1.
+    ENDIF.
+    rv_data = VALUE #( mt_stack[ mv_index ] OPTIONAL ).
+  ENDMETHOD.
+
+  METHOD next.
+    IF mv_index LT lines( mt_stack ).
+      mv_index += 1.
+    ENDIF.
+    rv_data = VALUE #( mt_stack[ mv_index ] OPTIONAL ).
+  ENDMETHOD.
+
+  METHOD deserialize.
+    mt_stack = it_string.
+    mv_index = lines( mt_stack ).
+  ENDMETHOD.
+
+  METHOD serialize.
+    rt_string = mt_stack.
+  ENDMETHOD.
+
+ENDCLASS.
