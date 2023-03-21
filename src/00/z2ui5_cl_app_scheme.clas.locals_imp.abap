@@ -14,7 +14,6 @@
 *& Lisp interpreter written in ABAP
 *& Copy and paste this code into a type I (include) program
 *&---------------------------------------------------------------------*
-*& Turtle Graphics from Frederik Hudák, placed under The Unlicense
 *& MIT License (see below)
 *& Martin Ceronio, martin.ceronio@infosize.co.za June 2015
 *& Jacques Nomssi Nzali, nomssi@gmail.com April 2020
@@ -133,7 +132,6 @@
 *      Environment
            env_spec      VALUE 'e',
            values        VALUE 'V',
-           abap_turtle   VALUE 't',
          END OF ENUM tv_type.
 
   TYPES: BEGIN OF ts_result,
@@ -157,6 +155,7 @@
   CLASS lcl_lisp DEFINITION CREATE PROTECTED FRIENDS lcl_lisp_new.
     PUBLIC SECTION.
       INTERFACES if_serializable_object.
+
       DATA type TYPE tv_type.
 *     Can this be replaced by a mesh? cf. DEMO_RND_PARSER_AST
       DATA mutable TYPE abap_boolean VALUE abap_true READ-ONLY.
@@ -701,6 +700,12 @@
   CLASS lcl_lisp_bytevector DEFINITION DEFERRED.
   CLASS lcl_lisp_escape DEFINITION DEFERRED.
 
+  INTERFACE lif_port.
+    METHODS get IMPORTING iv_title TYPE string
+                RETURNING VALUE(rv_input) TYPE string.
+    METHODS put IMPORTING iv_text TYPE string.
+  ENDINTERFACE.
+
   INTERFACE lif_input_port.
     METHODS read IMPORTING iv_title        TYPE string OPTIONAL
                  RETURNING VALUE(rv_input) TYPE string.
@@ -721,6 +726,8 @@
       INTERFACES lif_input_port.
       INTERFACES lif_output_port.
 
+      DATA gv_input TYPE string.
+      EVENTS ev_readln EXPORTING value(title) TYPE string.
       ALIASES: read FOR lif_input_port~read,
                write FOR lif_output_port~write,
                display FOR lif_output_port~display,
@@ -740,14 +747,14 @@
       DATA input TYPE abap_boolean READ-ONLY.
       DATA output TYPE abap_boolean READ-ONLY.
       DATA error TYPE abap_boolean READ-ONLY.
-      CLASS-DATA go_out TYPE REF TO if_oo_adt_classrun_out.
+      CLASS-DATA go_port TYPE REF TO lif_port.
+
     PROTECTED SECTION.
 *     input is always buffered
       DATA last_input TYPE string.
       DATA last_index TYPE tv_index.
       DATA last_len TYPE tv_index.
       DATA finite_size TYPE abap_boolean.
-      DATA out TYPE REF TO if_oo_adt_classrun_out.
 
       METHODS block_read RETURNING VALUE(rv_char) TYPE tv_char.
   ENDCLASS.
@@ -772,885 +779,6 @@
       DATA separator TYPE string.
 
       METHODS add IMPORTING text TYPE string.
-  ENDCLASS.
-
-  "  INCLUDE yy_lib_turtle.
-*&---------------------------------------------------------------------*
-*&  Include           YY_LIB_TURTLE
-*&---------------------------------------------------------------------*
-* Ported from https://github.com/FreHu/abap-turtle-graphics
-
-  "TYPES tv_real TYPE decfloat34.  " real data type
-
-  CLASS lcx_turtle_problem DEFINITION CREATE PRIVATE
-    INHERITING FROM cx_no_check.
-
-    PUBLIC SECTION.
-      CLASS-METHODS raise IMPORTING text TYPE string.
-      METHODS constructor IMPORTING text     TYPE string
-                                    previous TYPE REF TO cx_root OPTIONAL.
-    PRIVATE SECTION.
-      DATA text TYPE string.
-  ENDCLASS.
-
-  CLASS lcx_turtle_problem IMPLEMENTATION.
-
-    METHOD raise.
-      RAISE EXCEPTION TYPE lcx_turtle_problem EXPORTING text = text.
-    ENDMETHOD.
-
-    METHOD constructor ##ADT_SUPPRESS_GENERATION.
-      super->constructor( ).
-      me->text = text.
-      me->previous = previous.
-    ENDMETHOD.
-  ENDCLASS.
-
-  CLASS lcl_turtle_math DEFINITION.
-    PUBLIC SECTION.
-      TYPES numbers_i TYPE STANDARD TABLE OF tv_int WITH DEFAULT KEY.
-
-      CLASS-METHODS find_max_int
-        IMPORTING numbers       TYPE numbers_i
-        RETURNING VALUE(result) TYPE tv_int.
-  ENDCLASS.
-
-  CLASS lcl_turtle_math IMPLEMENTATION.
-
-    METHOD find_max_int.
-      DATA(max) = numbers[ 1 ].
-      LOOP AT numbers ASSIGNING FIELD-SYMBOL(<num>) FROM 2.
-        CHECK <num> > max.
-        max = <num>.
-      ENDLOOP.
-
-      result = max.
-    ENDMETHOD.
-  ENDCLASS.
-
-  CLASS lcl_turtle_convert DEFINITION.
-    PUBLIC SECTION.
-      CONSTANTS pi TYPE tv_real VALUE '3.1415926535897932384626433832795'.
-
-      CLASS-METHODS degrees_to_radians IMPORTING degrees        TYPE tv_real
-                                       RETURNING VALUE(radians) TYPE tv_real.
-
-      CLASS-METHODS radians_to_degrees IMPORTING radians        TYPE tv_real
-                                       RETURNING VALUE(degrees) TYPE tv_real.
-  ENDCLASS.
-
-  CLASS lcl_turtle_convert IMPLEMENTATION.
-
-    METHOD degrees_to_radians.
-      radians = degrees * pi / 180.
-    ENDMETHOD.
-
-    METHOD radians_to_degrees.
-      degrees = radians * 180 / pi.
-    ENDMETHOD.
-  ENDCLASS.
-
-  CLASS lcl_number_range DEFINITION.
-    PUBLIC SECTION.
-      TYPES number_range TYPE STANDARD TABLE OF i WITH EMPTY KEY.
-
-      "! Returns the list of numbers &lt;min, max).
-      "! This method repeats the mistake of Python 2.x and will consume a lot of memory if used with large ranges
-      CLASS-METHODS get
-        IMPORTING min           TYPE i
-                  max           TYPE i
-        RETURNING VALUE(result) TYPE number_range.
-  ENDCLASS.
-
-  CLASS lcl_number_range IMPLEMENTATION.
-
-    METHOD get.
-      result = VALUE #( FOR i = min WHILE i < max ( i ) ).
-    ENDMETHOD.
-  ENDCLASS.
-
-  CLASS lcl_turtle_colors DEFINITION.
-    PUBLIC SECTION.
-      TYPES: rgb_hex_color  TYPE string,
-             rgb_hex_colors TYPE STANDARD TABLE OF rgb_hex_color WITH EMPTY KEY.
-
-      TYPES: BEGIN OF t_pen,
-               stroke_color TYPE rgb_hex_color,
-               stroke_width TYPE i,
-               fill_color   TYPE rgb_hex_color,
-               is_up        TYPE abap_bool,
-             END OF t_pen.
-
-      CLASS-METHODS class_constructor.
-      CLASS-METHODS get_random_color
-        IMPORTING colors       TYPE rgb_hex_colors
-        RETURNING VALUE(color) TYPE rgb_hex_color.
-
-      CLASS-DATA default_color_scheme TYPE rgb_hex_colors.
-      CLASS-DATA default_pen TYPE t_pen.
-    PROTECTED SECTION.
-    PRIVATE SECTION.
-      CLASS-DATA random TYPE REF TO cl_abap_random.
-  ENDCLASS.
-
-
-  CLASS lcl_turtle_colors IMPLEMENTATION.
-
-    METHOD class_constructor.
-      default_color_scheme = VALUE #(
-        ( `#8a295c` )
-        ( `#5bbc6d` )
-        ( `#cb72d3` )
-        ( `#a8b03f` )
-        ( `#6973d8` )
-        ( `#c38138` )
-        ( `#543788` )
-        ( `#768a3c` )
-        ( `#ac4595` )
-        ( `#47bf9c` )
-        ( `#db6697` )
-        ( `#5f8dd3` )
-        ( `#b64e37` )
-        ( `#c287d1` )
-        ( `#ba4758` )  ).
-
-      random = cl_abap_random=>create( seed = 42 ).
-
-      default_pen = VALUE t_pen( stroke_width = 1
-                                 stroke_color = `#FF0000`
-                                 is_up = abap_false ).
-    ENDMETHOD.
-
-    METHOD get_random_color.
-      DATA(random_index) = random->intinrange( low = 1 high = lines( colors ) ).
-      color = colors[ random_index ].
-    ENDMETHOD.
-  ENDCLASS.
-
-  CLASS lcl_turtle DEFINITION DEFERRED.
-
-  CLASS lcl_turtle_svg DEFINITION.
-    PUBLIC SECTION.
-      TYPES:
-        BEGIN OF t_point,
-          x TYPE i,
-          y TYPE i,
-        END OF t_point,
-        t_points TYPE STANDARD TABLE OF t_point WITH DEFAULT KEY.
-
-      TYPES:
-        BEGIN OF line_params,
-          x_from TYPE i,
-          y_from TYPE i,
-          x_to   TYPE i,
-          y_to   TYPE i,
-        END OF line_params,
-
-
-        BEGIN OF polygon_params,
-          points TYPE t_points,
-        END OF polygon_params,
-        polyline_params TYPE polygon_params,
-
-        BEGIN OF text_params,
-          x    TYPE i,
-          y    TYPE i,
-          text TYPE string,
-        END OF text_params,
-
-        BEGIN OF circle_params,
-          center_x TYPE i,
-          center_y TYPE i,
-          radius   TYPE i,
-        END OF circle_params.
-
-      CLASS-METHODS:
-        new
-          IMPORTING turtle        TYPE REF TO lcl_turtle
-          RETURNING VALUE(result) TYPE REF TO lcl_turtle_svg.
-
-      METHODS:
-        line
-          IMPORTING params          TYPE line_params
-          RETURNING VALUE(svg_line) TYPE string,
-
-        polygon
-          IMPORTING params             TYPE polygon_params
-          RETURNING VALUE(svg_polygon) TYPE string,
-
-        polyline
-          IMPORTING params              TYPE polyline_params
-          RETURNING VALUE(svg_polyline) TYPE string,
-
-        text
-          IMPORTING params          TYPE text_params
-          RETURNING VALUE(svg_text) TYPE string,
-
-        circle
-          IMPORTING params            TYPE circle_params
-          RETURNING VALUE(svg_circle) TYPE string.
-
-      DATA turtle TYPE REF TO lcl_turtle READ-ONLY.
-    PROTECTED SECTION.
-    PRIVATE SECTION.
-  ENDCLASS.
-
-  CLASS lcl_turtle DEFINITION CREATE PRIVATE.
-    PUBLIC SECTION.
-      CONSTANTS:
-        BEGIN OF defaults,
-          height TYPE tv_int VALUE 800,
-          width  TYPE tv_int VALUE 600,
-          title  TYPE string VALUE `abapTurtle`,
-        END OF defaults.
-
-      TYPES: t_point  TYPE lcl_turtle_svg=>t_point,
-             t_points TYPE lcl_turtle_svg=>t_points.
-
-      TYPES t_pen TYPE lcl_turtle_colors=>t_pen.
-      TYPES rgb_hex_color TYPE lcl_turtle_colors=>rgb_hex_color.
-      TYPES rgb_hex_colors TYPE lcl_turtle_colors=>rgb_hex_colors.
-
-      TYPES:
-        BEGIN OF turtle_position,
-          x     TYPE tv_int,
-          y     TYPE tv_int,
-          angle TYPE tv_real,
-        END OF turtle_position.
-
-      TYPES multiple_turtles TYPE STANDARD TABLE OF REF TO lcl_turtle.
-
-      CLASS-METHODS new
-        IMPORTING height           TYPE tv_int DEFAULT defaults-height
-                  width            TYPE tv_int DEFAULT defaults-width
-                  background_color TYPE rgb_hex_color OPTIONAL
-                  title            TYPE string DEFAULT defaults-title
-        RETURNING VALUE(turtle)    TYPE REF TO lcl_turtle.
-
-      "! Creates a new turtle based on an existing instance. The position, angle and pen are preserved.
-      "! Does not preserve content.
-      METHODS clone RETURNING VALUE(turtle) TYPE REF TO lcl_turtle.
-
-      "! Merges drawings of multiple turtles into one.
-      CLASS-METHODS compose
-        IMPORTING turtles       TYPE multiple_turtles
-        RETURNING VALUE(turtle) TYPE REF TO lcl_turtle.
-
-      METHODS constructor
-        IMPORTING height           TYPE tv_int
-                  width            TYPE tv_int
-                  background_color TYPE rgb_hex_color OPTIONAL
-                  title            TYPE string.
-
-      METHODS right
-        IMPORTING degrees       TYPE tv_real
-        RETURNING VALUE(turtle) TYPE REF TO lcl_turtle.
-
-      METHODS left IMPORTING degrees       TYPE tv_real
-                   RETURNING VALUE(turtle) TYPE REF TO lcl_turtle.
-
-      METHODS set_pen IMPORTING pen           TYPE t_pen
-                      RETURNING VALUE(turtle) TYPE REF TO lcl_turtle.
-
-      METHODS goto
-        IMPORTING x             TYPE tv_int
-                  y             TYPE tv_int
-        RETURNING VALUE(turtle) TYPE REF TO lcl_turtle.
-
-      METHODS set_angle IMPORTING angle TYPE tv_real.
-
-      METHODS forward IMPORTING how_far       TYPE tv_int
-                      RETURNING VALUE(turtle) TYPE REF TO lcl_turtle.
-
-      METHODS to_offset
-        IMPORTING delta_x       TYPE numeric
-                  delta_y       TYPE numeric
-        RETURNING VALUE(turtle) TYPE REF TO lcl_turtle.
-
-      METHODS back IMPORTING how_far       TYPE tv_int
-                   RETURNING VALUE(turtle) TYPE REF TO lcl_turtle.
-
-      METHODS pen_up RETURNING VALUE(turtle) TYPE REF TO lcl_turtle.
-
-      METHODS pen_down RETURNING VALUE(turtle) TYPE REF TO lcl_turtle.
-
-      METHODS show RETURNING VALUE(turtle) TYPE REF TO lcl_turtle.
-
-      METHODS polygon_flower IMPORTING number_of_polygons TYPE tv_int
-                                       polygon_sides      TYPE tv_int
-                                       side_length        TYPE tv_int
-                             RETURNING VALUE(turtle)      TYPE REF TO lcl_turtle.
-
-      METHODS filled_square IMPORTING side_length   TYPE tv_int
-                                      start         TYPE t_point
-                            RETURNING VALUE(turtle) TYPE REF TO lcl_turtle.
-
-      METHODS regular_polygon IMPORTING num_sides     TYPE tv_int
-                                        side_length   TYPE tv_int
-                              RETURNING VALUE(turtle) TYPE REF TO lcl_turtle.
-
-      METHODS download IMPORTING filename TYPE string DEFAULT `abap-turtle.html`.
-
-      METHODS enable_random_colors.
-      METHODS disable_random_colors.
-
-      METHODS get_svg RETURNING VALUE(svg) TYPE string.
-      METHODS append_svg IMPORTING svg_to_append TYPE string.
-
-      METHODS:
-        get_position RETURNING VALUE(result) TYPE turtle_position,
-        set_position IMPORTING position TYPE turtle_position,
-        set_color_scheme IMPORTING color_scheme TYPE rgb_hex_colors,
-        set_width IMPORTING width TYPE tv_int,
-        set_height IMPORTING height TYPE tv_int,
-        set_svg IMPORTING svg TYPE string.
-
-      DATA: title        TYPE string READ-ONLY,
-            svg          TYPE string READ-ONLY,
-            width        TYPE tv_int READ-ONLY,
-            height       TYPE tv_int READ-ONLY,
-            position     TYPE turtle_position READ-ONLY,
-            pen          TYPE t_pen READ-ONLY,
-            color_scheme TYPE rgb_hex_colors READ-ONLY,
-            svg_builder  TYPE REF TO lcl_turtle_svg READ-ONLY.
-
-    PROTECTED SECTION.
-      DATA out TYPE REF TO if_oo_adt_classrun_out.
-    PRIVATE SECTION.
-      DATA use_random_colors TYPE abap_bool.
-
-      METHODS get_html RETURNING VALUE(html) TYPE string.
-
-      METHODS line
-        IMPORTING x_from        TYPE tv_int
-                  y_from        TYPE tv_int
-                  x_to          TYPE tv_int
-                  y_to          TYPE tv_int
-        RETURNING VALUE(turtle) TYPE REF TO lcl_turtle.
-  ENDCLASS.
-
-  CLASS lcl_turtle IMPLEMENTATION.
-
-    METHOD back.
-      right( degrees = 180 ).
-      forward( how_far ).
-      right( degrees = 180 ).
-    ENDMETHOD.
-
-    METHOD constructor.
-      me->width = width.
-      me->height = height.
-      me->pen = lcl_turtle_colors=>default_pen.
-      me->color_scheme = lcl_turtle_colors=>default_color_scheme.
-      me->use_random_colors = abap_true.
-      me->title = title.
-
-      me->svg_builder = lcl_turtle_svg=>new( me ).
-
-      IF background_color IS NOT INITIAL.
-        me->set_pen( VALUE #( fill_color = background_color ) ).
-        DATA(side_length) = 100.
-
-        DATA(points) = VALUE t_points( ( x = 0         y = 0 )
-                                       ( x = 0 + width y = 0 )
-                                       ( x = 0 + width y = 0 + height )
-                                       ( x = 0         y = 0 + height )  ).
-
-        me->append_svg( me->svg_builder->polyline( VALUE #( points = points ) )  ).
-      ENDIF.
-
-      me->pen = VALUE #( stroke_width = 1
-                         stroke_color = `#FF0000`
-                         is_up = abap_false ).
-
-      me->out = lcl_lisp_port=>go_out.
-    ENDMETHOD.
-
-    METHOD disable_random_colors.
-      me->use_random_colors = abap_false.
-    ENDMETHOD.
-
-    METHOD download.
-      RETURN.
-*    DATA(file_name) = filename.
-*    DATA(path) = ``.
-*    DATA(full_path) = ``.
-*
-*    cl_gui_frontend_services=>file_save_dialog(
-*      EXPORTING
-*        default_extension = `html`
-*        default_file_name = filename
-*        initial_directory = ``
-*      CHANGING
-*        filename = file_name
-*        path = path
-*        fullpath = full_path
-*      EXCEPTIONS
-*        OTHERS = 1 ).
-*
-*    IF sy-subrc <> 0.
-*      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-*              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
-*    ENDIF.
-*
-*    SPLIT me->get_html( ) AT |\r\n| INTO TABLE DATA(lines).
-*    cl_gui_frontend_services=>gui_download(
-*      EXPORTING
-*        filename = file_name
-*      CHANGING
-*        data_tab = lines
-*      EXCEPTIONS OTHERS = 1 ).
-*
-*    IF sy-subrc <> 0.
-*      RAISE EXCEPTION TYPE cx_demo_dyn_t100 MESSAGE ID sy-msgid
-*        TYPE sy-msgty NUMBER sy-msgno
-*        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
-*    ENDIF.
-
-    ENDMETHOD.
-
-    METHOD enable_random_colors.
-      me->use_random_colors = abap_true.
-    ENDMETHOD.
-
-    METHOD to_offset.
-      DATA(old_position) = position.
-      DATA(new_position) = VALUE turtle_position( x = round( val = old_position-x + delta_x dec = 0 )
-                                                  y = round( val = old_position-y + delta_y dec = 0 )
-                                              angle = old_position-angle ).
-      IF pen-is_up = abap_false.
-        me->line( x_from = position-x
-                  y_from = position-y
-                  x_to = new_position-x
-                  y_to = new_position-y ).
-      ENDIF.
-
-      set_position( new_position ).
-
-      turtle = me.
-    ENDMETHOD.
-
-    METHOD forward.
-      DATA(angle) = CONV f( lcl_turtle_convert=>degrees_to_radians( position-angle ) ).
-
-      turtle = to_offset( delta_x = how_far * cos( angle )
-                          delta_y = how_far * sin( angle ) ).
-    ENDMETHOD.
-
-    METHOD get_html.
-      html = |<html><body><h1>abapTurtle</h1><svg width="{ width }" height="{ height }">{ svg }</svg></body></html>|.
-    ENDMETHOD.
-
-    METHOD get_position.
-      result = me->position.
-    ENDMETHOD.
-
-    METHOD get_svg.
-      svg = me->svg.
-    ENDMETHOD.
-
-    METHOD append_svg.
-      svg &&= svg_to_append.
-    ENDMETHOD.
-
-    METHOD goto.
-      position-x = x.
-      position-y = y.
-      turtle = me.
-    ENDMETHOD.
-
-    METHOD left.
-      position-angle -= degrees.
-      position-angle = position-angle MOD 360.
-      turtle = me.
-    ENDMETHOD.
-
-    METHOD line.
-      IF use_random_colors = abap_true.
-        pen-stroke_color = lcl_turtle_colors=>get_random_color( me->color_scheme ).
-      ENDIF.
-
-      svg &&= |<line x1="{ x_from }" y1="{ y_from }" x2="{ x_to }" y2="{ y_to }"|
-            & |stroke="{ pen-stroke_color }" stroke-width="{ pen-stroke_width }"/>|.
-
-      turtle = me.
-    ENDMETHOD.
-
-    METHOD new.
-      turtle = NEW lcl_turtle( width = width
-                               height = height
-                               background_color = background_color
-                               title = title ).
-    ENDMETHOD.
-
-    METHOD clone.
-      turtle = NEW #( width = width
-                      height = height
-                      title = title ).
-
-      turtle->set_pen( pen ).
-      turtle->set_color_scheme( color_scheme ).
-      turtle->set_position( position ).
-      turtle->set_angle( position-angle ).
-    ENDMETHOD.
-
-    METHOD compose.
-      IF lines( turtles ) < 1.
-        lcx_turtle_problem=>raise( `Not enough turtles to compose anything.` ).
-      ENDIF.
-
-      " start where the last one left off
-      DATA(lo_turtle) = turtles[ lines( turtles ) ].
-      turtle = lo_turtle->clone( ).
-
-      " new image size is the largest of composed turtles
-      turtle->set_height( lcl_turtle_math=>find_max_int( VALUE #( FOR t IN turtles ( t->height ) ) ) ).
-      turtle->set_width( lcl_turtle_math=>find_max_int( VALUE #( FOR t IN turtles ( t->width ) ) ) ).
-
-      DATA(composed_svg) = REDUCE string( INIT result = ``
-          FOR <svg> IN VALUE string_table( FOR <x> IN turtles ( <x>->svg ) )
-            NEXT result = result && <svg> ).
-
-      turtle->append_svg( composed_svg ).
-
-    ENDMETHOD.
-
-    METHOD pen_down.
-      me->pen-is_up = abap_false.
-      turtle = me.
-    ENDMETHOD.
-
-    METHOD pen_up.
-      me->pen-is_up = abap_true.
-      turtle = me.
-    ENDMETHOD.
-
-    METHOD right.
-      position-angle += degrees.
-      position-angle = position-angle MOD 360.
-      turtle = me.
-    ENDMETHOD.
-
-    METHOD set_angle.
-      me->position-angle = angle.
-    ENDMETHOD.
-
-    METHOD set_color_scheme.
-      me->color_scheme = color_scheme.
-    ENDMETHOD.
-
-    METHOD set_width.
-      me->width = width.
-    ENDMETHOD.
-
-    METHOD set_height.
-      me->height = height.
-    ENDMETHOD.
-
-    METHOD set_svg.
-      me->svg = svg.
-    ENDMETHOD.
-
-    METHOD set_pen.
-      me->pen = pen.
-      turtle = me.
-    ENDMETHOD.
-
-    METHOD set_position.
-      me->position = position.
-    ENDMETHOD.
-
-    METHOD show.
-      out->write( get_html( ) ).
-      turtle = me.
-    ENDMETHOD.
-
-    METHOD regular_polygon.
-      DATA(angle) = CONV tv_real( 360 / num_sides ).
-      DATA(n) = nmax( val1 = 0 val2 = num_sides ).
-      DO n TIMES.
-        forward( side_length ).
-        right( angle ).
-      ENDDO.
-
-      turtle = me.
-    ENDMETHOD.
-
-    METHOD polygon_flower.
-      DATA(current_polygon) = 0.
-      WHILE current_polygon < number_of_polygons.
-
-        regular_polygon( num_sides   = polygon_sides
-                         side_length = side_length ).
-
-        " rotate before painting next polygon
-        right( 360 / number_of_polygons ).
-
-        current_polygon += 1.
-      ENDWHILE.
-
-      turtle = me.
-    ENDMETHOD.
-
-    METHOD filled_square.
-      DATA(points) = VALUE t_points( ( start )
-                                     ( x = start-x + side_length y = start-y )
-                                     ( x = start-x + side_length y = start-y + side_length )
-                                     ( x = start-x               y = start-y + side_length ) ).
-
-      append_svg( turtle->svg_builder->polyline( VALUE #( points = points ) )  ).
-
-      turtle = me.
-    ENDMETHOD.
-
-  ENDCLASS.
-
-  CLASS lcl_turtle_lsystem DEFINITION.
-
-    PUBLIC SECTION.
-      TYPES:
-        BEGIN OF lsystem_rewrite_rule,
-          from TYPE string,
-          to   TYPE string,
-        END OF lsystem_rewrite_rule,
-        lsystem_rewrite_rules TYPE STANDARD TABLE OF lsystem_rewrite_rule WITH DEFAULT KEY.
-
-      TYPES:
-        BEGIN OF ENUM lsystem_instruction_kind,
-          noop,
-          forward,    " Go forward by 'amount' pixels
-          back,       " Go back by 'amount' pixels
-          left,       " Turn left by 'amount' degrees
-          right,      " Turn right by 'amount' degrees
-          stack_push, " Push position on the stack
-          stack_pop,  " Pop position from the stack
-        END OF ENUM lsystem_instruction_kind.
-
-      TYPES:
-        BEGIN OF lsystem_instruction,
-          symbol TYPE c LENGTH 1,
-          kind   TYPE lsystem_instruction_kind,
-          "! Distance or angle (if the operation requires it)
-          amount TYPE tv_int,
-*        move_distance  TYPE i,        "! For move instructions, how many pixels to move by
-*        rotate_by      TYPE tv_real, "! For rotate instructions, how many degrees to rotate by
-        END OF lsystem_instruction,
-        lsystem_instructions TYPE HASHED TABLE OF lsystem_instruction WITH UNIQUE KEY symbol.
-
-      TYPES:
-        BEGIN OF params,
-          "! Starting symbols
-          initial_state  TYPE string,
-          "! How many times the rewrite rules will be applied
-          num_iterations TYPE i,
-          instructions   TYPE lsystem_instructions,
-          "! A list of rewrite patterns which will be applied each iteration in order.
-          "! E.g. initial state F with rule F -> FG and 3 iterations
-          "! will produce FG, FGG, FGGG in each iteration respectively.
-          "! Currently allows up to 3 variables F,G,H
-          rewrite_rules  TYPE lsystem_rewrite_rules,
-        END OF params.
-
-      CLASS-METHODS new
-        IMPORTING turtle        TYPE REF TO lcl_turtle
-                  parameters    TYPE params
-                  out           TYPE REF TO if_oo_adt_classrun_out
-        RETURNING VALUE(result) TYPE REF TO lcl_turtle_lsystem.
-
-      CLASS-METHODS koch_curve_params RETURNING VALUE(params) TYPE params.
-      CLASS-METHODS pattern_params RETURNING VALUE(params) TYPE params.
-      CLASS-METHODS plant_params RETURNING VALUE(params) TYPE params.
-      CLASS-METHODS plant_2_params RETURNING VALUE(params) TYPE params.
-
-      METHODS execute.
-      METHODS show.
-
-    PROTECTED SECTION.
-    PRIVATE SECTION.
-      METHODS get_final_value
-        RETURNING VALUE(result) TYPE string.
-
-      TYPES t_position_stack TYPE STANDARD TABLE OF lcl_turtle=>turtle_position WITH EMPTY KEY.
-      METHODS:
-        push_stack IMPORTING position TYPE lcl_turtle=>turtle_position,
-        pop_stack RETURNING VALUE(position) TYPE lcl_turtle=>turtle_position.
-
-      DATA turtle TYPE REF TO lcl_turtle.
-      DATA parameters TYPE params.
-      DATA position_stack TYPE t_position_stack.
-  ENDCLASS.
-
-  CLASS lcl_turtle_lsystem IMPLEMENTATION.
-
-    METHOD execute.
-      DATA(final_value) = get_final_value( ).
-
-      DATA(index) = 0.
-      WHILE index < strlen( final_value ).
-        DATA(symbol) = final_value+index(1).
-        DATA(rule) = VALUE #( parameters-instructions[ symbol = symbol ] OPTIONAL ).
-        CASE rule-kind.
-          WHEN noop.
-            CONTINUE.
-          WHEN forward.      " WHEN `F` OR `G` OR `H`.
-            turtle->forward( rule-amount ).
-          WHEN back.
-            turtle->back( rule-amount ).
-          WHEN left.                      " WHEN `+`.
-            turtle->right( CONV tv_real( rule-amount ) ).
-          WHEN right.                     " WHEN `-`.
-            turtle->left( CONV tv_real( rule-amount ) ).
-          WHEN stack_push.                " WHEN `[`.
-            push_stack( turtle->position ).
-          WHEN stack_pop.                 " WHEN `]`.
-            DATA(position) = pop_stack( ).
-            turtle->goto( x = position-x y = position-y ).
-            turtle->set_angle( position-angle ).
-          WHEN OTHERS.
-            lcx_turtle_problem=>raise( |Lsystem - unconfigured symbol { symbol }.| ).
-        ENDCASE.
-
-        index += 1.
-      ENDWHILE.
-
-    ENDMETHOD.
-
-    METHOD get_final_value.
-      DATA(instructions) = parameters-initial_state.
-      DO parameters-num_iterations TIMES.
-        LOOP AT parameters-rewrite_rules ASSIGNING FIELD-SYMBOL(<rule>).
-          REPLACE ALL OCCURRENCES OF <rule>-from IN instructions WITH <rule>-to.
-        ENDLOOP.
-      ENDDO.
-
-      result = instructions.
-    ENDMETHOD.
-
-    METHOD new.
-      result = NEW #( ).
-      result->turtle = turtle.
-      result->parameters = parameters.
-    ENDMETHOD.
-
-    METHOD pop_stack.
-      position = position_stack[ lines( position_stack ) ].
-      DELETE position_stack INDEX lines( position_stack ).
-    ENDMETHOD.
-
-    METHOD push_stack.
-      APPEND position TO position_stack.
-    ENDMETHOD.
-
-    METHOD show.
-      turtle->show( ).
-    ENDMETHOD.
-
-    METHOD koch_curve_params.
-      params = VALUE #(
-        initial_state = `F`
-        " Move distance 10, Rotate right by 90, Rotate left by 90
-        instructions = VALUE #(
-          ( symbol = 'F' kind = forward amount = 10 )
-          ( symbol = '+' kind = right amount = 90 )
-          ( symbol = '-' kind = left amount = 90 ) )
-        num_iterations = 3
-        rewrite_rules = VALUE #( ( from = `F` to = `F+F-F-F+F` ) ) ).
-
-    ENDMETHOD.
-
-    METHOD pattern_params.
-      params = VALUE #( initial_state = `F-F-F-F`
-        instructions = VALUE #(
-          ( symbol = 'F' kind = forward amount = 10 )
-          ( symbol = '+' kind = right amount = 90 )
-          ( symbol = '-' kind = left amount = 90 ) )
-        num_iterations = 3
-        rewrite_rules = VALUE #( ( from = `F` to = `FF-F+F-F-FF` ) ) ).
-    ENDMETHOD.
-
-    METHOD plant_params.
-      params = VALUE #( LET distance = 10 rotation = 25 IN
-        initial_state = `F`
-        instructions = VALUE #(
-          ( symbol = `F` kind = forward amount = distance )
-          ( symbol = `+` kind = right amount = rotation )
-          ( symbol = `-` kind = left amount = rotation )
-          ( symbol = `[` kind = stack_push )
-          ( symbol = `]` kind = stack_pop ) )
-        num_iterations = 5
-        rewrite_rules = VALUE #( ( from = `F` to = `F[+F]F[-F][F]` ) ) ).
-    ENDMETHOD.
-
-    METHOD plant_2_params.
-      params = VALUE #( initial_state = `F`
-        instructions = VALUE #(
-          ( symbol = `F` kind = forward amount = 10 )
-          ( symbol = `+` kind = right amount = 21 )
-          ( symbol = `-` kind = left amount = 21 )
-          ( symbol = `[` kind = stack_push )
-          ( symbol = `]` kind = stack_pop ) )
-        num_iterations = 4
-        rewrite_rules = VALUE #( ( from = `F` to = `FF-[+F+F+F]+[-F-F+F]` ) ) ).
-    ENDMETHOD.
-
-  ENDCLASS.
-
-  CLASS lcl_turtle_svg IMPLEMENTATION.
-
-    METHOD circle.
-      svg_circle = |<circle cx="{ params-center_x }" cy="{ params-center_y }" r="{ params-radius }" |
-          && |stroke="{ turtle->pen-stroke_color }" |
-          && |stroke-width="{ turtle->pen-stroke_width }" fill="{ turtle->pen-fill_color }"/>|.
-    ENDMETHOD.
-
-    METHOD line.
-      svg_line = |<line x1="{ params-x_from }" y1="{ params-y_from }" x2="{ params-x_to }" y2="{ params-y_to }" |
-        && |stroke="{ turtle->pen-stroke_color }" stroke-width="{ turtle->pen-stroke_width }"/>|.
-    ENDMETHOD.
-
-    METHOD new.
-      result = NEW #( ).
-      result->turtle = turtle.
-    ENDMETHOD.
-
-
-    METHOD polygon.
-      DATA(point_data) = REDUCE string(
-        INIT res = ``
-        FOR point IN params-points
-        NEXT res = res && |{ point-x },{ point-y } | ).
-
-      svg_polygon = |<polygon points="{ point_data }"|
-        && | stroke="{ turtle->pen-stroke_color }"|
-        && | stroke-width="{ turtle->pen-stroke_width }" fill="{ turtle->pen-fill_color }" />|.
-
-    ENDMETHOD.
-
-    METHOD polyline.
-      DATA(point_data) = REDUCE string(
-        INIT res = ``
-        FOR point IN params-points
-        NEXT res = res && |{ point-x },{ point-y } | ).
-
-      svg_polyline = |<polyline points="{ point_data }"|
-        && |stroke="{ turtle->pen-stroke_color }" |
-        && |stroke-width="{ turtle->pen-stroke_width }" fill="{ turtle->pen-fill_color }" />|.
-
-    ENDMETHOD.
-
-    METHOD text.
-      svg_text = |<text x="{ params-x }" y="{ params-y }">{ params-text }</text>|.
-    ENDMETHOD.
-  ENDCLASS.
-
-  CLASS lcl_lisp_turtle DEFINITION INHERITING FROM lcl_lisp FRIENDS lcl_lisp_new.
-    PUBLIC SECTION.
-      METHODS constructor IMPORTING width      TYPE REF TO lcl_lisp_integer
-                                    height     TYPE REF TO lcl_lisp_integer
-                                    init_x     TYPE REF TO lcl_lisp_integer
-                                    init_y     TYPE REF TO lcl_lisp_integer
-                                    init_angle TYPE REF TO lcl_lisp_real.
-      DATA turtle TYPE REF TO lcl_turtle.
   ENDCLASS.
 
   CLASS lcl_lisp_new DEFINITION.
@@ -1786,12 +914,6 @@
       CLASS-METHODS splice_unquote IMPORTING io_elem        TYPE REF TO lcl_lisp
                                    RETURNING VALUE(ro_elem) TYPE REF TO lcl_lisp.
 
-      CLASS-METHODS turtles IMPORTING width            TYPE REF TO lcl_lisp_integer
-                                      height           TYPE REF TO lcl_lisp_integer
-                                      init_x           TYPE REF TO lcl_lisp_integer
-                                      init_y           TYPE REF TO lcl_lisp_integer
-                                      init_angle       TYPE REF TO lcl_lisp_real
-                            RETURNING VALUE(ro_turtle) TYPE REF TO lcl_lisp_turtle.
       CLASS-METHODS throw_radix IMPORTING message TYPE string
                                 RAISING   lcx_lisp_exception.
 
@@ -1849,7 +971,6 @@
       input = iv_input.
       output = iv_output.
       error = iv_error.
-      me->out = go_out.
     ENDMETHOD.
 
     METHOD close.
@@ -1876,8 +997,8 @@
     ENDMETHOD.
 
     METHOD read_stream.
-      "client->view_popup( 'POPUP_TO_INPUT' ).
-      rv_input = out->get( name = iv_title ).
+      RAISE EVENT ev_readln EXPORTING title = iv_title.
+      rv_input = gv_input.
     ENDMETHOD.
 
     METHOD set_input_string.
@@ -2348,6 +1469,7 @@
     PUBLIC SECTION.
       TYPES tt_element TYPE STANDARD TABLE OF REF TO lcl_lisp WITH DEFAULT KEY.
       TYPES tv_char2 TYPE c LENGTH 2.
+      CLASS-DATA gv_lisp_trace TYPE abap_boolean VALUE abap_false ##NEEDED.
       CONSTANTS:
         c_lisp_dot    TYPE tv_char VALUE '.',
         c_open_paren  TYPE tv_char VALUE '(',
@@ -2675,29 +1797,6 @@
       METHODS proc_string_append     IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
       METHODS proc_string_to_list    IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
       METHODS proc_string_to_symbol  IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-
-* Turtle library
-      METHODS proc_turtle_new            IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_exist          IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_move           IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_draw           IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_erase          IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_move_offset    IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_draw_offset    IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_erase_offset   IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_turn_degrees   IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_turn_radians   IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_set_pen_width  IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_set_pen_color  IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_merge          IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_clean          IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_width          IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_height         IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_state          IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_pen_width      IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_pen_color      IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_regular_poly   IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
-      METHODS proc_turtle_regular_polys  IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
 
 * Continuation
       METHODS proc_call_cc IMPORTING list TYPE REF TO lcl_lisp RETURNING VALUE(result) TYPE REF TO lcl_lisp RAISING lcx_lisp_exception ##called.
@@ -5082,7 +4181,7 @@
                                               environment = lo_env ).
                     "_trace_call lo_proc lr_tail.
                     IF gv_lisp_trace EQ abap_true.
-                      lcl_lisp_port=>go_out->write( |call { lo_proc->value } { lo_proc->to_string( ) } param { lo_tail->to_string( ) }| ).
+                      lcl_lisp_port=>go_port->put( |call { lo_proc->value } { lo_proc->to_string( ) } param { lo_tail->to_string( ) }| ).
                     ENDIF.
 
                     CASE lo_proc->type.
@@ -5178,7 +4277,7 @@
         result->set_shared_structure( ).
         "_trace_result result.
         IF gv_lisp_trace EQ abap_true.
-          lcl_lisp_port=>go_out->write( |=> { result->to_string( ) }| ).
+          lcl_lisp_port=>go_port->put( |=> { result->to_string( ) }| ).
         ENDIF.
 
         RETURN.
@@ -13533,609 +12632,6 @@
       ENDTRY.
     ENDMETHOD.
 
-    " Turtle library
-    METHOD proc_turtle_new. "turtles
-*    (turtles width
-*          height
-*        [  init-x
-*         init-y
-*         init-angle])    →   turtles?
-*      width : real?
-*      height : real?
-*      init-x : real? = (/ width 2)
-*      init-y : real? = (/ height 2)
-*      init-angle : real? = 0
-      DATA lv_real TYPE tv_real VALUE 0.
-      DATA lv_angle_exact TYPE abap_boolean VALUE abap_false.
-
-      IF list IS NOT BOUND OR list->car IS NOT BOUND OR list->cdr IS NOT BOUND OR list->cdr->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-      "_validate_integer list->car `turtles`.
-      IF list->car->type NE integer.
-        list->car->raise( ` is not an integer in turtles` ) ##NO_TEXT.
-      ENDIF.
-
-      DATA(lo_width) = CAST lcl_lisp_integer( list->car ).
-      "_validate_integer list->cdr->car `turtles`.
-      IF list->cdr->car->type NE integer.
-        list->cdr->car->raise( ` is not an integer in turtles` ) ##NO_TEXT.
-      ENDIF.
-
-      DATA(lo_height) = CAST lcl_lisp_integer( list->cdr->car ).
-
-      DATA(lo_next) = list->cdr->cdr.
-
-      IF lo_next->car IS BOUND AND lo_next->car->type EQ integer.
-        DATA(lo_init_x) = CAST lcl_lisp_integer( lo_next->car ).
-
-        lo_next = lo_next->cdr.
-        IF lo_next->car IS BOUND AND lo_next->car->type EQ integer.
-          DATA(lo_init_y) = CAST lcl_lisp_integer( lo_next->car ).
-
-          lo_next = lo_next->cdr.
-          IF lo_next->car IS BOUND.
-            "_get_number lv_real lo_next->car `turtles`.
-            IF lo_next->car IS NOT BOUND.
-              lcl_lisp=>throw( c_error_incorrect_input ).
-            ENDIF.
-
-            DATA(cell) = lo_next->car.
-            CASE cell->type.
-              WHEN integer.
-                lv_real = CAST lcl_lisp_integer( cell )->int.
-                lv_angle_exact = abap_true.
-              WHEN real.
-                lv_real = CAST lcl_lisp_real( cell )->float.
-              WHEN rational.
-                DATA(lo_rat) = CAST lcl_lisp_rational( cell ).
-                lv_real = lo_rat->int / lo_rat->denominator.
-*             WHEN complex.
-
-*             WHEN bigint.
-
-              WHEN OTHERS.
-                cell->raise( ` is not a number in turtles` ).
-            ENDCASE.
-          ENDIF.
-        ENDIF.
-      ENDIF.
-
-      IF lo_init_x IS NOT BOUND.
-        lo_init_x = lcl_lisp_new=>integer( lo_width->int DIV 2 ).
-      ENDIF.
-
-      IF lo_init_y IS NOT BOUND.
-        lo_init_y = lcl_lisp_new=>integer( lo_height->int DIV 2 ).
-      ENDIF.
-
-      DATA(lo_init_angle) = lcl_lisp_new=>real( value = lv_real
-                                                exact = lv_angle_exact ).
-
-      result = lcl_lisp_new=>turtles( width = lo_width
-                                      height = lo_height
-                                      init_x = lo_init_x
-                                      init_y = lo_init_y
-                                      init_angle = lo_init_angle ).
-    ENDMETHOD.
-
-    METHOD proc_turtle_merge.
-      "_validate: list, list->car, list->cdr.
-      IF list IS NOT BOUND OR list->car IS NOT BOUND OR list->cdr IS NOT BOUND OR list->cdr->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-*    (merge turtles1 turtles2) → turtles?
-*      turtles1 : turtles?
-*      turtles2 : turtles?
-      "_validate_turtle list->car `merge`.
-      IF list->car->type NE abap_turtle.
-        list->car->raise( ` is not a turtle in merge` ) ##NO_TEXT.
-      ENDIF.
-      "_validate_turtle list->cdr->car `merge`.
-      IF list->cdr->car->type NE abap_turtle.
-        list->cdr->car->raise( ` is not a turtle in merge` ) ##NO_TEXT.
-      ENDIF.
-
-      DATA(lo_turtle1) = CAST lcl_lisp_turtle( list->car ).
-      DATA(lo_turtle2) = CAST lcl_lisp_turtle( list->cdr->car ).
-
-      DATA(lo_width) = lcl_lisp_new=>integer( nmax( val1 = lo_turtle1->turtle->width
-                                              val2 = lo_turtle2->turtle->width ) ).
-      DATA(lo_height) = lcl_lisp_new=>integer( nmax( val1 = lo_turtle1->turtle->height
-                                               val2 = lo_turtle2->turtle->height ) ).
-
-      DATA(lo_turtle) = lcl_lisp_new=>turtles( width = lo_width
-                                               height = lo_height
-                                               init_x = lcl_lisp_new=>integer( lo_width->int DIV 2 )
-                                               init_y = lcl_lisp_new=>integer( lo_height->int DIV 2 )
-                                               init_angle = lcl_lisp_new=>real( value = 0
-                                                                                exact = abap_true ) ).
-      lo_turtle->turtle = lcl_turtle=>compose( VALUE #( ( lo_turtle1->turtle ) ( lo_turtle2->turtle ) ) ).
-      result = lo_turtle.
-    ENDMETHOD.
-
-    METHOD proc_turtle_exist. "turtles?
-      IF list IS NOT BOUND OR list->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-      "(turtles? v) → boolean?
-      IF list->car->type EQ abap_turtle.
-        result = true.
-      ELSE.
-        result = false.
-      ENDIF.
-    ENDMETHOD.
-
-    METHOD proc_turtle_move. "move
-      IF list IS NOT BOUND OR list->car IS NOT BOUND OR list->cdr IS NOT BOUND OR list->cdr->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-*    (move n turtles) → turtles?
-*      n : real?  (integer)
-*      turtles : turtles?
-      "_validate_integer list->car `turtles move n`.
-      IF list->car->type NE integer.
-        list->car->raise( ` is not an integer in turtles move n` ) ##NO_TEXT.
-      ENDIF.
-
-      "_validate_turtle list->cdr->car `turtles move`.
-      IF list->cdr->car->type NE abap_turtle.
-        list->cdr->car->raise( ` is not a turtle in turtles move` ) ##NO_TEXT.
-      ENDIF.
-
-      DATA(lo_turtles) = CAST lcl_lisp_turtle( list->cdr->car ).
-      result = lo_turtles.
-
-      lo_turtles->turtle->pen_up( ).
-      lo_turtles->turtle->forward( CAST lcl_lisp_integer( list->car )->int ).
-    ENDMETHOD.
-
-    METHOD proc_turtle_draw. "draw
-*    (draw n turtles) → turtles?
-*      n : real? (integer)
-*      turtles : turtles?
-      IF list IS NOT BOUND OR list->car IS NOT BOUND OR list->cdr IS NOT BOUND OR list->cdr->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-
-      "_validate_integer list->car `turtles draw n`.
-      IF list->car->type NE integer.
-        list->car->raise( ` is not an integer in turtles draw n` ) ##NO_TEXT.
-      ENDIF.
-
-      "_validate_turtle list->cdr->car `turtles draw`.
-      IF list->cdr->car->type NE abap_turtle.
-        list->cdr->car->raise( ` is not a turtle in turtles draw` ) ##NO_TEXT.
-      ENDIF.
-
-      DATA(lo_turtles) = CAST lcl_lisp_turtle( list->cdr->car ).
-      lo_turtles->turtle->pen_down( ).
-      lo_turtles->turtle->forward( CAST lcl_lisp_integer( list->car )->int ).
-
-      result = lo_turtles.
-    ENDMETHOD.
-
-    METHOD proc_turtle_erase.
-*    (erase n turtles) → turtles?
-*      n : real?
-*      turtles : turtles?
-      IF list IS NOT BOUND OR list->car IS NOT BOUND OR list->cdr IS NOT BOUND OR list->cdr->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-      "_validate_integer list->car `turtles erase n`.
-      IF list->car->type NE integer.
-        list->car->raise( ` is not an integer in turtles erase n` ) ##NO_TEXT.
-      ENDIF.
-      "_validate_turtle list->cdr->car `turtles erase`.
-      IF list->cdr->car->type NE abap_turtle.
-        list->cdr->car->raise( ` is not a turtle in turtles erase` ) ##NO_TEXT.
-      ENDIF.
-
-      DATA(lo_turtles) = CAST lcl_lisp_turtle( list->cdr->car ).
-
-      " Set color = fill_color
-      DATA(pen) = lo_turtles->turtle->pen.
-      pen-stroke_color = pen-fill_color.
-      lo_turtles->turtle->set_pen( pen ).
-
-      lo_turtles->turtle->pen_down( ).
-      lo_turtles->turtle->forward( CAST lcl_lisp_integer( list->car )->int ).
-
-      result = lo_turtles.
-    ENDMETHOD.
-
-    METHOD proc_turtle_move_offset.
-*    (move-offset h v turtles) → turtles?
-*      h : real? (integer)
-*      v : real? (integer)
-*      turtles : turtles?
-      IF list IS NOT BOUND OR list->car IS NOT BOUND OR list->cdr IS NOT BOUND
-        OR list->cdr->cdr IS NOT BOUND OR list->cdr->car IS NOT BOUND OR  list->cdr->cdr->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-
-      "_validate_integer list->car `turtles move-offset h`.
-      IF list->car->type NE integer.
-        list->car->raise( ` is not an integer in turtles move-offset h` ) ##NO_TEXT.
-      ENDIF.
-      "_validate_integer list->cdr->car `turtles move-offset v`.
-      IF list->cdr->car->type NE integer.
-        list->cdr->car->raise( ` is not an integer in turtles move-offset v` ) ##NO_TEXT.
-      ENDIF.
-      "_validate_turtle list->cdr->cdr->car `move-offset`.
-      IF list->cdr->cdr->car->type NE abap_turtle.
-        list->cdr->cdr->car->raise( ` is not a turtle in move-offset` ) ##NO_TEXT.
-      ENDIF.
-
-      DATA(lo_turtles) = CAST lcl_lisp_turtle( list->cdr->cdr->car ).
-
-      lo_turtles->turtle->pen_up( ).
-      lo_turtles->turtle->to_offset( delta_x = CAST lcl_lisp_integer( list->car )->int
-                                     delta_y = CAST lcl_lisp_integer( list->cdr->car )->int ).
-      result = lo_turtles.
-    ENDMETHOD.
-
-    METHOD proc_turtle_draw_offset.
-*    (draw-offset h v turtles) → turtles?
-*      h : real? (integer)
-*      v : real? (integer)
-*      turtles : turtles?
-      IF list IS NOT BOUND OR list->car IS NOT BOUND OR list->cdr IS NOT BOUND OR list->cdr->car IS NOT BOUND
-         OR list->cdr->cdr IS NOT BOUND OR list->cdr->cdr->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-
-      "_validate_integer list->car `turtles draw-offset h`.
-      IF list->car->type NE integer.
-        list->car->raise( ` is not an integer in turtles draw-offset h`  ) ##NO_TEXT.
-      ENDIF.
-      "_validate_integer list->cdr->car `turtles draw-offset v`.
-      IF list->cdr->car->type NE integer.
-        list->cdr->car->raise( ` is not an integer in draw-offset v` ) ##NO_TEXT.
-      ENDIF.
-      "_validate_turtle list->cdr->cdr->car `draw-offset`.
-      IF list->cdr->cdr->car->type NE abap_turtle.
-        list->cdr->cdr->car->raise( ` is not a turtle in draw-offset` ) ##NO_TEXT.
-      ENDIF.
-
-      DATA(lo_turtles) = CAST lcl_lisp_turtle( list->cdr->cdr->car ).
-      lo_turtles->turtle->pen_down( ).
-      lo_turtles->turtle->to_offset( delta_x = CAST lcl_lisp_integer( list->car )->int
-                                     delta_y = CAST lcl_lisp_integer( list->cdr->car )->int ).
-
-      result = lo_turtles.
-    ENDMETHOD.
-
-    METHOD proc_turtle_erase_offset.
-      IF list IS NOT BOUND OR list->car IS NOT BOUND OR list->cdr IS NOT BOUND OR list->cdr->cdr IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-*    (erase-offset n turtles) → turtles?
-*      n : real?
-*      turtles : turtles?
-      "_validate_integer list->car `turtles erase-offset h`.
-      IF list->car->type NE integer.
-        list->car->raise( ` is not an integer in turtles erase-offset h` ) ##NO_TEXT.
-      ENDIF.
-
-      "_validate_integer list->cdr->car `turtles erase-offset v`.
-      IF list->cdr->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-      IF list->cdr->car->type NE integer.
-        list->cdr->car->raise( ` is not an integer in turtles erase-offset v` ) ##NO_TEXT.
-      ENDIF.
-
-      "_validate_turtle list->cdr->cdr->car `erase-offset`.
-      IF list->cdr->cdr->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-      IF list->cdr->cdr->car->type NE abap_turtle.
-        list->cdr->cdr->car->raise( ` is not a turtle in erase-offset` ) ##NO_TEXT.
-      ENDIF.
-
-      DATA lo_turtles TYPE REF TO lcl_lisp_turtle.
-
-      lo_turtles = CAST lcl_lisp_turtle( list->cdr->cdr->car ).
-
-      lo_turtles->turtle->pen_down( ).
-
-      DATA(lv_off_h) = CAST lcl_lisp_integer( list->car )->int.
-      DATA(lv_off_v) = CAST lcl_lisp_integer( list->cdr->car )->int.
-
-      lo_turtles->turtle->to_offset( delta_x = lv_off_h
-                                     delta_y = lv_off_v ).
-    ENDMETHOD.
-
-    METHOD proc_turtle_turn_degrees. "turn
-      IF list IS NOT BOUND OR list->car IS NOT BOUND OR list->cdr IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-*      (turn theta turtles) → turtles?
-*        theta : real?
-*        turtles : turtles?
-      "_validate_number list->car `turtles turn`.
-      CASE list->car->type.
-        WHEN integer
-          OR real
-          OR rational
-          OR complex.
-        WHEN OTHERS.
-          list->car->raise_nan( `turtles turn` ) ##NO_TEXT.
-      ENDCASE.
-
-      DATA lo_theta TYPE REF TO lcl_lisp_real.
-      lo_theta ?= list->car.
-
-      "_validate_turtle list->cdr->car `turn`.
-      IF list->cdr->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-      IF list->cdr->car->type NE abap_turtle.
-        list->cdr->car->raise( ` is not a turtle in turn` ) ##NO_TEXT.
-      ENDIF.
-
-      DATA lo_turtles TYPE REF TO lcl_lisp_turtle.
-      lo_turtles ?= list->cdr->car.
-
-      DATA(angle) = ( lo_turtles->turtle->position-angle + lo_theta->float ) MOD 360.
-      lo_turtles->turtle->set_position( VALUE #( x = lo_turtles->turtle->position-x
-                                                 y = lo_turtles->turtle->position-y
-                                                 angle = angle ) ).
-      result = lo_turtles.
-    ENDMETHOD.
-
-    METHOD proc_turtle_turn_radians. "turn/radians
-*      (turn/radians theta turtles) → turtles?
-*        theta : real?
-*        turtles : turtles?
-      IF list IS NOT BOUND OR list->car IS NOT BOUND OR list->cdr IS NOT BOUND OR list->cdr->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-      "_validate_number list->car `turn/radians theta`.
-      CASE list->car->type.
-        WHEN integer
-          OR real
-          OR rational
-          OR complex.
-        WHEN OTHERS.
-          list->car->raise_nan( `turn/radians theta` ) ##NO_TEXT.
-      ENDCASE.
-
-      DATA lo_theta TYPE REF TO lcl_lisp_real.
-      lo_theta ?= list->car.
-
-      "_validate_turtle list->cdr->car `turn/radians`.
-      IF list->cdr->car->type NE abap_turtle.
-        list->cdr->car->raise( ` is not a turtle in turn/radians` ) ##NO_TEXT.
-      ENDIF.
-
-      DATA lo_turtles TYPE REF TO lcl_lisp_turtle.
-      lo_turtles ?= list->cdr->car.
-
-      DATA(angle) = lcl_turtle_convert=>degrees_to_radians( lo_turtles->turtle->position-angle MOD 360 ) + lo_theta->float.
-      angle = lcl_turtle_convert=>radians_to_degrees( angle ) MOD 360.
-
-      lo_turtles->turtle->set_position( VALUE #( x = lo_turtles->turtle->position-x
-                                                 y = lo_turtles->turtle->position-y
-                                                 angle = angle ) ).
-      result = lo_turtles.
-    ENDMETHOD.
-
-    METHOD proc_turtle_set_pen_width. "set-pen-width
-*      (set-pen-width turtles width) → turtles?
-*        turtles : turtles?
-*        width : (real-in 0 255)
-      IF list IS NOT BOUND OR list->car IS NOT BOUND OR list->cdr IS NOT BOUND OR list->cdr->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-      "_validate_turtle list->car `set-pen-width`.
-      IF list->car->type NE abap_turtle.
-        list->car->raise( ` is not a turtle in set-pen-width` ) ##NO_TEXT.
-      ENDIF.
-      "_validate_index list->cdr->car `set-pen-width`.
-      IF CAST lcl_lisp_integer( list->cdr->car )->int LT 0.
-        list->cdr->car->raise( ` must be non-negative in set-pen-width` ) ##NO_TEXT.
-      ENDIF.
-
-      DATA(lo_turtles) = CAST lcl_lisp_turtle( list->car ).
-      lo_turtles->turtle->set_pen( VALUE #( BASE lo_turtles->turtle->pen
-                                            stroke_width = CAST lcl_lisp_integer( list->cdr->car )->int ) ).
-      result = lo_turtles.
-    ENDMETHOD.
-
-    METHOD proc_turtle_set_pen_color. "set-pen-color
-*    (set-pen-color turtles color) → turtles?
-*      turtles : turtles?
-*      color : (or/c string? (is-a?/c color%))
-      "_validate: list, list->car, list->cdr.
-      IF list IS NOT BOUND OR list->car IS NOT BOUND OR list->cdr IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-      "_validate_turtle list->car `set-pen-color`.
-      IF list->car->type NE abap_turtle.
-        list->car->raise( ` is not a turtle in set-pen-color` ) ##NO_TEXT.
-      ENDIF.
-
-      "_validate_string list->cdr->car `set-pen-color`.
-      IF list->cdr->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-      IF list->cdr->car->type NE string.
-        list->cdr->car->raise( ` is not a string in set-pen-color` ) ##NO_TEXT.
-      ENDIF.
-
-      DATA(lo_color) = CAST lcl_lisp_string( list->cdr->car ).
-
-      DATA(lo_turtles) = CAST lcl_lisp_turtle( list->car ).
-      lo_turtles->turtle->set_pen( VALUE #( BASE lo_turtles->turtle->pen
-                                            stroke_color = lo_color->value ) ).
-      result = lo_turtles.
-    ENDMETHOD.
-
-    METHOD proc_turtle_state.
-      IF list IS NOT BOUND OR list->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-
-*    (turtle-state turtles) → (listof (vector/c real? real? real?)
-      "_validate_turtle list->car `turtle-state`.
-      IF list->car->type NE abap_turtle.
-        list->car->raise( ` is not a turtle in turtle-state` ) ##NO_TEXT.
-      ENDIF.
-
-      DATA lo_turtles TYPE REF TO lcl_lisp_turtle.
-      lo_turtles ?= list->car.
-      DATA(position) = lo_turtles->turtle->get_position( ).
-
-      result = lcl_lisp_new=>cons( io_car = lcl_lisp_new=>vector(
-                  it_vector = VALUE tt_lisp( ( lcl_lisp_new=>integer( position-x ) )
-                                             ( lcl_lisp_new=>integer( position-y ) )
-                                             ( lcl_lisp_new=>real( value = position-angle
-                                                                   exact = abap_false ) )  )
-                  iv_mutable = abap_false ) ).
-    ENDMETHOD.
-
-    METHOD proc_turtle_clean.
-*    (clean turtles) → turtles?
-*      turtles : turtles?
-      IF list IS NOT BOUND OR list->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-      "_validate_turtle list->car `clean`.
-      IF list->car->type NE abap_turtle.
-        list->car->raise( ` is not a turtle in clean` ) ##NO_TEXT.
-      ENDIF.
-
-      DATA(lo_turtles) = CAST lcl_lisp_turtle( list->car ).
-      throw( `turtle clean not implemented yet` ).
-      result = lo_turtles.
-    ENDMETHOD.
-
-    METHOD proc_turtle_width.
-*    (turtles-width turtles) → (and/c real? positive?)
-*      turtles : turtles?
-      IF list IS NOT BOUND OR list->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-
-      "_validate_turtle list->car `turtles-width`.
-      IF list->car->type NE abap_turtle.
-        list->car->raise( ` is not a turtle in turtles-width` ) ##NO_TEXT.
-      ENDIF.
-
-      result = lcl_lisp_new=>integer( CAST lcl_lisp_turtle( list->car )->turtle->width ).
-    ENDMETHOD.
-
-    METHOD proc_turtle_height.
-*    (turtles-height turtles) → (and/c real? positive?)
-*      turtles : turtles?
-      IF list IS NOT BOUND OR list->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-      "_validate_turtle list->car `turtles-height`.
-      IF list->car->type NE abap_turtle.
-        list->car->raise( ` is not a turtle in turtles-height` ) ##NO_TEXT.
-      ENDIF.
-
-      result = lcl_lisp_new=>integer( CAST lcl_lisp_turtle( list->car )->turtle->height ).
-    ENDMETHOD.
-
-    METHOD proc_turtle_pen_width.
-*      (turtles-pen-width turtles) → (real-in 0 255)
-*        turtles : turtles?
-      IF list IS NOT BOUND OR list->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-      "_validate_turtle list->car `turtles-pen-width`.
-      IF list->car->type NE abap_turtle.
-        list->car->raise( ` is not a turtle in turtles-pen-width` ) ##NO_TEXT.
-      ENDIF.
-
-      result = lcl_lisp_new=>integer( CAST lcl_lisp_turtle( list->car )->turtle->pen-stroke_width ).
-    ENDMETHOD.
-
-    METHOD proc_turtle_pen_color.
-*     (turtles-pen-color turtles) → (is-a?/c color%)
-*       turtles : turtles?
-      IF list IS NOT BOUND OR list->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-
-      "_validate_turtle list->car `turtles-pen-color`.
-      IF list->car->type NE abap_turtle.
-        list->car->raise( ` is not a turtle in turtles-pen-color` ) ##NO_TEXT.
-      ENDIF.
-
-      result = lcl_lisp_new=>string( CAST lcl_lisp_turtle( list->car )->turtle->pen-stroke_color ).
-    ENDMETHOD.
-
-    METHOD proc_turtle_regular_poly.
-*      (regular-poly sides radius turtles) → turtles?
-*        sides : exact-nonnegative-integer?
-*        radius : real?
-*        turtles : turtles?
-      IF list IS NOT BOUND OR list->car IS NOT BOUND OR list->cdr IS NOT BOUND OR
-        list->cdr->cdr IS NOT BOUND OR list->cdr->car IS NOT BOUND OR list->cdr->cdr->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-      "_validate_index list->car `regular-poly sides`.
-      IF CAST lcl_lisp_integer( list->car )->int LT 0.
-        list->car->raise( ` must be non-negative in regular-poly sides` ) ##NO_TEXT.
-      ENDIF.
-      "_validate_integer list->cdr->car `regular-poly radius`.
-      IF list->cdr->car->type NE integer.
-        list->cdr->car->raise( ` is not an integer in regular-poly radius` ) ##NO_TEXT.
-      ENDIF.
-      "_validate_turtle list->cdr->cdr->car `regular-poly`.
-      IF list->cdr->cdr->car->type NE abap_turtle.
-        list->cdr->cdr->car->raise( ` is not a turtle in regular-poly` ) ##NO_TEXT.
-      ENDIF.
-
-      DATA(lo_turtles) = CAST lcl_lisp_turtle( list->cdr->cdr->car ).
-      lo_turtles->turtle->regular_polygon( num_sides = CAST lcl_lisp_integer( list->car )->int
-                                           side_length = CAST lcl_lisp_integer( list->cdr->car )->int ).
-      result = lo_turtles.
-    ENDMETHOD.
-
-    METHOD proc_turtle_regular_polys.
-*      Draws n regular polys each with n sides centered at the turtle.
-*      (regular-polys n s turtles) → turtles?
-*        n : exact-nonnegative-integer?
-*        s : any/c
-*        turtles : turtles?
-      IF list IS NOT BOUND OR list->car IS NOT BOUND OR list->cdr IS NOT BOUND
-        OR list->cdr->cdr IS NOT BOUND OR list->cdr->car IS NOT BOUND OR list->cdr->cdr->car IS NOT BOUND.
-        lcl_lisp=>throw( c_error_incorrect_input ).
-      ENDIF.
-
-      "_validate_integer list->car `regular-polys n`.
-      IF list->car->type NE integer.
-        list->car->raise( ` is not an integer in regular-polys n` ) ##NO_TEXT.
-      ENDIF.
-      "_validate_index list->cdr->car `regular-polys s`.
-      IF list->cdr->car->type NE integer.
-        list->cdr->car->raise( ` is not an integer in regular-polys s` ) ##NO_TEXT.
-      ENDIF.
-      IF CAST lcl_lisp_integer( list->cdr->car )->int LT 0.
-        list->cdr->car->raise( ` must be non-negative in regular-polys s` ) ##NO_TEXT.
-      ENDIF.
-      "_validate_turtle list->cdr->cdr->car `regular-polys`.
-      IF list->cdr->cdr->car->type NE abap_turtle.
-        list->cdr->cdr->car->raise( ` is not a turtle in regular-polys` ) ##NO_TEXT.
-      ENDIF.
-
-      DATA(lv_n) = CAST lcl_lisp_integer( list->car )->int.
-      DATA(lv_side) = CAST lcl_lisp_integer( list->cdr->car )->int.
-      DATA lo_turtles TYPE REF TO lcl_lisp_turtle.
-      lo_turtles ?= list->cdr->cdr->car.
-
-      lo_turtles->turtle->polygon_flower( number_of_polygons = lv_n
-                                          polygon_sides = lv_n
-                                          side_length = lv_side ).
-      result = lo_turtles.
-    ENDMETHOD.
-
     METHOD define_values.
       RETURN.
     ENDMETHOD.
@@ -15608,28 +14104,6 @@
       define_value( symbol = 'sql-query'         type = native value   = 'PROC_SQL_QUERY' ).
       define_value( symbol = 'define-query'      type = native value   = 'PROC_SQL_PREPARE' ).
 
-      define_value( symbol = 'turtles'       type = native value   = 'PROC_TURTLE_NEW' ).
-      define_value( symbol = 'turtles?'      type = native value   = 'PROC_TURTLE_EXIST' ).
-      define_value( symbol = 'move'          type = native value   = 'PROC_TURTLE_MOVE' ).
-      define_value( symbol = 'draw'          type = native value   = 'PROC_TURTLE_DRAW' ).
-      define_value( symbol = 'erase'         type = native value   = 'PROC_TURTLE_ERASE' ).
-      define_value( symbol = 'move-offset'   type = native value   = 'PROC_TURTLE_MOVE_OFFSET' ).
-      define_value( symbol = 'draw-offset'   type = native value   = 'PROC_TURTLE_DRAW_OFFSET' ).
-      define_value( symbol = 'erase-offset'  type = native value   = 'PROC_TURTLE_ERASE_OFFSET' ).
-      define_value( symbol = 'turn'          type = native value   = 'PROC_TURTLE_TURN_DEGREES' ).
-      define_value( symbol = 'turn/radians'  type = native value   = 'PROC_TURTLE_TURN_RADIANS' ).
-      define_value( symbol = 'set-pen-width' type = native value   = 'PROC_TURTLE_SET_PEN_WIDTH' ).
-      define_value( symbol = 'set-pen-color' type = native value   = 'PROC_TURTLE_SET_PEN_COLOR' ).
-
-      define_value( symbol = 'merge'             type = native value = 'PROC_TURTLE_MERGE' ).
-      define_value( symbol = 'clean'             type = native value = 'PROC_TURTLE_CLEAN' ).
-      define_value( symbol = 'turtle-state'      type = native value = 'PROC_TURTLE_STATE' ).
-      define_value( symbol = 'turtles-height'    type = native value = 'PROC_TURTLE_HEIGHT' ).
-      define_value( symbol = 'turtles-width'     type = native value = 'PROC_TURTLE_WIDTH' ).
-      define_value( symbol = 'turtles-pen-color' type = native value = 'PROC_TURTLE_PEN_COLOR' ).
-      define_value( symbol = 'turtles-pen-width' type = native value = 'PROC_TURTLE_PEN_WIDTH' ).
-      define_value( symbol = 'regular-poly'      type = native value = 'PROC_TURTLE_REGULAR_POLY' ).
-      define_value( symbol = 'regular-polys'     type = native value = 'PROC_TURTLE_REGULAR_POLYS' ).
 
 *     Define a value in the environment for SYST
       " set( symbol = 'ab-sy' element = lcl_lisp_new=>data( REF #( syst ) ) ).
@@ -15647,6 +14121,7 @@
       CLASS-METHODS new_profiler IMPORTING io_port       TYPE REF TO lcl_lisp_port
                                            ii_log        TYPE REF TO lif_log
                                            io_env        TYPE REF TO object
+                                           iv_trace      TYPE abap_boolean
                                  RETURNING VALUE(ro_int) TYPE REF TO lcl_lisp_profiler.
       METHODS eval_repl REDEFINITION.
       DATA runtime TYPE tv_int READ-ONLY.
@@ -15662,6 +14137,7 @@
                                       ii_log  = ii_log ).
       IF io_env IS BOUND.
         ro_int->env ?= io_env.
+        ro_int->gv_lisp_trace = iv_trace.
       ENDIF.
     ENDMETHOD.
 
@@ -16105,8 +14581,6 @@
         WHEN abap_sql_set.
           str = `<ABAP Query Result Set>`.
 
-        WHEN abap_turtle.
-          str = `<ABAP turtle>`.
       ENDCASE.
     ENDMETHOD.                    "to_string
 
@@ -16638,14 +15112,6 @@
     METHOD escape.
       ro_elem = NEW lcl_lisp_escape( abap_table ).
       ro_elem->ms_cont = value.
-    ENDMETHOD.
-
-    METHOD turtles.
-      ro_turtle = NEW lcl_lisp_turtle( width = width
-                                       height = height
-                                       init_x = init_x
-                                       init_y = init_y
-                                       init_angle = init_angle ).
     ENDMETHOD.
 
     METHOD lambda.
@@ -17255,20 +15721,6 @@
     ENDMETHOD.
   ENDCLASS.
 
-  CLASS lcl_lisp_turtle IMPLEMENTATION.
-
-    METHOD constructor.
-      super->constructor( abap_turtle ).
-      turtle = lcl_turtle=>new( height = height->int
-                                width = width->int
-                                title = `SchemeTurtle` ).
-      turtle->set_position( VALUE #( x = init_x->int
-                                     y = init_y->int
-                                     angle = init_angle->float ) ).
-    ENDMETHOD.
-
-  ENDCLASS.
-
 CLASS lcl_stack DEFINITION.
   PUBLIC SECTION.
     INTERFACES if_serializable_object.
@@ -17322,4 +15774,23 @@ CLASS lcl_stack IMPLEMENTATION.
     rt_string = mt_stack.
   ENDMETHOD.
 
+ENDCLASS.
+
+CLASS lcl_out DEFINITION.
+  PUBLIC SECTION.
+    METHODS constructor IMPORTING i_client TYPE REF TO z2ui5_if_client.
+    METHODS readln FOR EVENT ev_readln OF lcl_lisp_port.
+  PRIVATE SECTION.
+    DATA client TYPE REF TO z2ui5_if_client.
+ENDCLASS.
+
+CLASS lcl_out IMPLEMENTATION.
+
+  METHOD constructor.
+    client = i_client.
+  ENDMETHOD.
+
+  METHOD readln.
+    client->view_popup( 'POPUP_TO_INPUT' ).
+  ENDMETHOD.
 ENDCLASS.

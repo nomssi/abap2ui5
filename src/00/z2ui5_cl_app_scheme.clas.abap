@@ -30,9 +30,14 @@ CLASS z2ui5_cl_app_scheme DEFINITION
         environment TYPE REF TO if_serializable_object,
         code_stack TYPE string_table,
         stack TYPE REF TO object,
+        out TYPE REF TO object,
       END OF screen.
+
   PROTECTED SECTION.
     METHODS init.
+    METHODS evaluate IMPORTING trace TYPE abap_boolean DEFAULT abap_false
+                               client TYPE REF TO z2ui5_if_client.
+    METHODS trace IMPORTING client TYPE REF TO z2ui5_if_client.
     METHODS refresh_scheme.
     METHODS format_all.
     METHODS sample_code RETURNING VALUE(result) TYPE string.
@@ -47,13 +52,14 @@ CLASS z2ui5_cl_app_scheme DEFINITION
     METHODS refresh.
     METHODS init_console.
     METHODS repl IMPORTING code TYPE string
+                           trace TYPE abap_boolean DEFAULT abap_false
                  RETURNING VALUE(response) TYPE string.
+
 ENDCLASS.
 
 
 
 CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
-
 
   METHOD format_all.
     screen-console_area = screen-log.
@@ -77,8 +83,8 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
 
 
   METHOD refresh.
-    DATA lo_port TYPE REF TO lcl_lisp_buffered_port.
-    DATA lo_output_port TYPE REF TO lcl_lisp_buffered_port.
+    DATA lo_port TYPE REF TO lcl_lisp_port.
+    DATA lo_output_port TYPE REF TO lif_log.
     DATA lo_int TYPE REF TO lcl_lisp_profiler.
     DATA lo_stack TYPE REF TO lcl_stack.
 
@@ -86,7 +92,7 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
                                    iv_input     = abap_true
                                    iv_output    = abap_true
                                    iv_error     = abap_true
-                                   iv_buffered  = abap_true ).
+                                   iv_buffered  = abap_false ).
     screen-port = lo_port.
     lo_output_port ?= lcl_lisp_new=>port( iv_port_type = textual
                                           iv_input     = abap_false
@@ -95,8 +101,10 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
                                           iv_buffered  = abap_true ).
     screen-output_port = lo_output_port.
     lo_int = lcl_lisp_profiler=>new_profiler( io_port = lo_port
-                                              ii_log = lo_port
-                                              io_env = screen-environment ).
+                                              ii_log = lo_output_port
+                                              io_env = screen-environment
+                                              iv_trace = abap_false ).
+
     lo_stack = NEW #( screen-code_stack ).
     screen-interpreter ?= lo_int.
     screen-environment ?= lo_int->env.
@@ -123,9 +131,11 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
     TRY.
         lo_port ?= screen-port.
         lo_output_port ?= screen-output_port.
+
         lo_int = lcl_lisp_profiler=>new_profiler( io_port = lo_output_port
                                                   ii_log = lo_port
-                                                  io_env = screen-environment ).
+                                                  io_env = screen-environment
+                                                  iv_trace = trace ).
         response = lo_int->eval_repl( EXPORTING code = code
                                       IMPORTING output = output ).
         response = |[ { lo_int->runtime } µs ] { response }|.
@@ -196,20 +206,50 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
     popup->content(
         )->simple_form(
         )->label( i_descr
-        )->input(  view->_bind( screen-input_area ) ).
+        )->input( view->_bind( screen-input_area ) ).
 
     popup->footer( )->overflow_toolbar(
           )->toolbar_spacer(
           )->button(
               text  = 'Cancel'
-              press = view->_event( 'BUTTON_TEXTAREA_CANCEL' )
+              press = view->_event( 'BUTTON_INPUT_CANCEL' )
           )->button(
               text  = 'Confirm'
-              press = view->_event( 'BUTTON_TEXTAREA_CONFIRM' )
+              press = view->_event( 'BUTTON_INPUT_CONFIRM' )
               type  = 'Emphasized' ).
 
   ENDMETHOD.
 
+  METHOD evaluate.
+    DATA lo_port TYPE REF TO lcl_lisp_port.
+
+    DATA(lo_out) = NEW lcl_out( client ).
+    screen-out = lo_out.
+    lo_port ?= screen-port.
+    SET HANDLER lo_out->readln FOR lo_port.
+
+    DATA(response) = repl( code = screen-code_area
+                           trace = trace ).
+    format_all( ).
+    reset( ).
+    client->set( t_scroll_pos = VALUE #( ( n = 'id_console' v = '99999' )
+                                         ( n = 'id_output' v = '99999' ) ) ).
+  ENDMETHOD.
+
+  METHOD trace.
+    TYPES: BEGIN OF ts_header,
+             user TYPE syuname,
+             time TYPE syuzeit,
+           END OF ts_header.
+    DATA header TYPE ts_header.
+
+    header-user = sy-uname.
+    header-time = sy-uzeit.
+*   Run
+    evaluate( trace = abap_true
+              client = client ).
+
+  ENDMETHOD.
 
   METHOD z2ui5_if_app~controller.
 
@@ -236,6 +276,11 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
           WHEN 'BUTTON_RESET'.
             refresh_scheme( ).
 
+          WHEN 'BUTTON_INPUT_CONFIRM'.
+
+          WHEN 'BUTTON_INPUT_CANCEL'.
+            CLEAR screen-input_area.
+
           WHEN 'BUTTON_PREV'.
             screen-code_area = CAST lcl_stack( screen-stack )->previous( ).
 
@@ -243,15 +288,12 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
             screen-code_area = CAST lcl_stack( screen-stack )->next( ).
 
           WHEN 'BUTTON_TRACE'.
+            trace( client ).
 
           WHEN 'BUTTON_SEXP'.
 
           WHEN 'BUTTON_EVAL'.
-            DATA(response) = repl( screen-code_area ).
-            format_all( ).
-            reset( ).
-            client->set( t_scroll_pos = VALUE #( ( n = 'id_console' v = '99999' )
-                                                 ( n = 'id_output' v = '99999' ) ) ).
+            evaluate( client ).
 
         ENDCASE.
 
@@ -268,7 +310,7 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
             )->button(
                 text  = 'Evaluate'
                 press = view->_event( 'BUTTON_EVAL' )
-                icon = 'sap-icon://initiative'
+                icon = 'sap-icon://begin'
             )->toolbar_spacer(
             )->button( text = 'S-Expression' press = view->_event( 'BUTTON_SEXP' )
                        icon = 'sap-icon://tree'

@@ -2,7 +2,7 @@
 *"* definitions, interfaces or type declarations) you need for
 *"* components in the private section
 
-  CONSTANTS gv_lisp_trace TYPE abap_boolean VALUE abap_false ##NEEDED.
+  CLASS lcl_lisp_port DEFINITION DEFERRED.
 
   CONSTANTS:
     c_lisp_input     TYPE string VALUE 'ABAP Lisp Input' ##NO_TEXT,
