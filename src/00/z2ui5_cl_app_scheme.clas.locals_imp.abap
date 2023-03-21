@@ -726,7 +726,7 @@
       INTERFACES lif_input_port.
       INTERFACES lif_output_port.
 
-      DATA gv_input TYPE string.
+      CLASS-DATA last_input TYPE string.
       EVENTS ev_readln EXPORTING value(title) TYPE string.
       ALIASES: read FOR lif_input_port~read,
                write FOR lif_output_port~write,
@@ -740,8 +740,8 @@
       METHODS close_input.
       METHODS close_output.
 
-      METHODS read_stream IMPORTING iv_title        TYPE string OPTIONAL
-                          RETURNING VALUE(rv_input) TYPE string.
+      METHODS read_stream IMPORTING iv_title        TYPE string OPTIONAL.
+                          "RETURNING VALUE(rv_input) TYPE string.
 
       DATA port_type TYPE tv_port_type READ-ONLY.
       DATA input TYPE abap_boolean READ-ONLY.
@@ -751,7 +751,6 @@
 
     PROTECTED SECTION.
 *     input is always buffered
-      DATA last_input TYPE string.
       DATA last_index TYPE tv_index.
       DATA last_len TYPE tv_index.
       DATA finite_size TYPE abap_boolean.
@@ -998,7 +997,6 @@
 
     METHOD read_stream.
       RAISE EVENT ev_readln EXPORTING title = iv_title.
-      rv_input = gv_input.
     ENDMETHOD.
 
     METHOD set_input_string.
@@ -1012,7 +1010,7 @@
         last_input = c_lisp_eof.
         last_len = 0.
       ELSE.
-        last_input = read_stream( ).
+        read_stream( ).  " <-- last_input
         last_len = strlen( last_input ).
       ENDIF.
       rv_char = last_input+0(1).
@@ -1042,7 +1040,8 @@
         rv_input = last_input+last_index.
         CLEAR: last_input, last_index, last_len.
       ELSE.
-        rv_input = read_stream( iv_title ).
+        read_stream( iv_title ).
+        rv_input = last_input.
       ENDIF.
     ENDMETHOD.
 
@@ -15791,6 +15790,7 @@ CLASS lcl_out IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD readln.
+    client->view_show( 'ABAP_SCHEME' ).
     client->view_popup( 'POPUP_TO_INPUT' ).
   ENDMETHOD.
 ENDCLASS.

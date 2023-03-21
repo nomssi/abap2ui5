@@ -61,6 +61,24 @@ ENDCLASS.
 
 CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
 
+
+  METHOD evaluate.
+    DATA lo_port TYPE REF TO lcl_lisp_port.
+
+    DATA(lo_out) = NEW lcl_out( client ).
+    screen-out = lo_out.
+    lo_port ?= screen-port.
+    SET HANDLER lo_out->readln FOR lo_port.
+
+    DATA(response) = repl( code = screen-code_area
+                           trace = trace ).
+    format_all( ).
+    reset( ).
+    client->set( t_scroll_pos = VALUE #( ( n = 'id_console' v = '99999' )
+                                         ( n = 'id_output' v = '99999' ) ) ).
+  ENDMETHOD.
+
+
   METHOD format_all.
     screen-console_area = screen-log.
     screen-output_area = screen-output.
@@ -124,16 +142,16 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
   METHOD repl.
     " evaluates the Scheme expression entered in the code area
     DATA lo_int TYPE REF TO lcl_lisp_profiler. "The Lisp interpreter.
-    DATA lo_port TYPE REF TO lcl_lisp_buffered_port.
-    DATA lo_output_port TYPE REF TO lcl_lisp_buffered_port.
     DATA output TYPE string.
+    DATA lo_port TYPE REF TO lcl_lisp_port.
+    DATA lo_buffered_port TYPE REF TO lcl_lisp_buffered_port.
 
     TRY.
         lo_port ?= screen-port.
-        lo_output_port ?= screen-output_port.
+        lo_buffered_port ?= screen-output_port.
 
-        lo_int = lcl_lisp_profiler=>new_profiler( io_port = lo_output_port
-                                                  ii_log = lo_port
+        lo_int = lcl_lisp_profiler=>new_profiler( io_port = lo_port
+                                                  ii_log = lo_buffered_port
                                                   io_env = screen-environment
                                                   iv_trace = trace ).
         response = lo_int->eval_repl( EXPORTING code = code
@@ -155,6 +173,7 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
     CLEAR screen-code_area.
   ENDMETHOD.
 
+
   METHOD sample_code.
     CONSTANTS c_max_index TYPE i VALUE 3.
 
@@ -171,13 +190,16 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
     ENDCASE.
   ENDMETHOD.
 
+
   METHOD sample_code1.
     result = `(+ 1 3 4 4)`.
   ENDMETHOD.
 
+
   METHOD sample_code2.
     result = `(list-ref (list "hop" "skip" "jump") 0)    ; extract by position. Index starts with 0`.
   ENDMETHOD.
+
 
   METHOD sample_code3.
     result =    `;; https://see.stanford.edu/materials/icsppcs107/30-Scheme-Functions.pdf` &&
@@ -195,46 +217,6 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
                 `  (zero? (remainder year 400))))`.
   ENDMETHOD.
 
-  METHOD view_popup_input.
-
-    DATA(view) = i_client->factory_view( 'POPUP_TO_INPUT' ).
-    DATA(popup) = view->dialog(
-                    contentheight = '500px'
-                    contentwidth  = '500px'
-                    title = 'Scheme Input Dialog' ).
-
-    popup->content(
-        )->simple_form(
-        )->label( i_descr
-        )->input( view->_bind( screen-input_area ) ).
-
-    popup->footer( )->overflow_toolbar(
-          )->toolbar_spacer(
-          )->button(
-              text  = 'Cancel'
-              press = view->_event( 'BUTTON_INPUT_CANCEL' )
-          )->button(
-              text  = 'Confirm'
-              press = view->_event( 'BUTTON_INPUT_CONFIRM' )
-              type  = 'Emphasized' ).
-
-  ENDMETHOD.
-
-  METHOD evaluate.
-    DATA lo_port TYPE REF TO lcl_lisp_port.
-
-    DATA(lo_out) = NEW lcl_out( client ).
-    screen-out = lo_out.
-    lo_port ?= screen-port.
-    SET HANDLER lo_out->readln FOR lo_port.
-
-    DATA(response) = repl( code = screen-code_area
-                           trace = trace ).
-    format_all( ).
-    reset( ).
-    client->set( t_scroll_pos = VALUE #( ( n = 'id_console' v = '99999' )
-                                         ( n = 'id_output' v = '99999' ) ) ).
-  ENDMETHOD.
 
   METHOD trace.
     TYPES: BEGIN OF ts_header,
@@ -250,6 +232,34 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
               client = client ).
 
   ENDMETHOD.
+
+
+  METHOD view_popup_input.
+
+    DATA(view) = i_client->factory_view( 'POPUP_TO_INPUT' ).
+    DATA(popup) = view->dialog(
+                    contentwidth  = '500px'
+                    title = 'Scheme Input Dialog'
+                    icon = 'sap-icon://question-mark' ).
+
+    popup->content(
+        )->simple_form(
+        )->label( i_descr
+        )->input( id = 'id_input'
+                  showClearIcon = abap_true
+                  value = view->_bind( screen-input_area ) ).
+
+    popup->footer( )->overflow_toolbar(
+          )->toolbar_spacer(
+          )->button(
+              text  = 'Cancel'
+              press = view->_event( 'BUTTON_INPUT_CANCEL' )
+          )->button(
+              text  = 'Confirm'
+              press = view->_event( 'BUTTON_INPUT_CONFIRM' )
+              type  = 'Emphasized' ).
+  ENDMETHOD.
+
 
   METHOD z2ui5_if_app~controller.
 
@@ -277,6 +287,7 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
             refresh_scheme( ).
 
           WHEN 'BUTTON_INPUT_CONFIRM'.
+            lcl_lisp_port=>last_input = screen-input_area.
 
           WHEN 'BUTTON_INPUT_CANCEL'.
             CLEAR screen-input_area.
@@ -301,7 +312,7 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
 
       WHEN client->cs-lifecycle_method-on_rendering.
 
-        DATA(view) = client->factory_view( 'SCHEME_INPUT' ).
+        DATA(view) = client->factory_view( 'ABAP_SCHEME' ).
         DATA(page) = view->page( id = 'id_page'
                                  title = 'abapScheme - Workbench'
                                  navbuttontap = view->_event( 'BACK' ) ).
