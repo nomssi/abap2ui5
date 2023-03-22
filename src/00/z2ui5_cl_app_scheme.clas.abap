@@ -312,7 +312,7 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
 
       WHEN client->cs-lifecycle_method-on_rendering.
 
-        DATA(view) = client->factory_view( 'ABAP_SCHEME' ).
+        DATA(view) = client->factory_view( 'SCHEME_INPUT' ).
         DATA(page) = view->page( id = 'id_page'
                                  title = 'abapScheme - Workbench'
                                  navbuttontap = view->_event( 'BACK' ) ).

@@ -3122,7 +3122,6 @@
       IF io_head IS NOT BOUND.
         lcl_lisp=>throw( c_error_incorrect_input ).
       ENDIF.
-
       ro_env = lcl_lisp_env_factory=>clone( io_head->environment ).
 
       ro_env->parameters_to_symbols( io_args = SWITCH #( io_head->category WHEN macro THEN io_args
