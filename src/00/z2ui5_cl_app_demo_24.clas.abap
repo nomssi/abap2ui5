@@ -21,8 +21,6 @@ CLASS Z2UI5_CL_APP_DEMO_24 IMPLEMENTATION.
 
     CASE client->get( )-lifecycle_method.
 
-      WHEN client->cs-lifecycle_method-on_init.
-
       WHEN client->cs-lifecycle_method-on_event.
 
         CASE client->get( )-event.
@@ -32,7 +30,7 @@ CLASS Z2UI5_CL_APP_DEMO_24 IMPLEMENTATION.
 
           WHEN 'CALL_NEW_APP_VIEW'.
             client->nav_app_call( NEW z2ui5_cl_app_demo_25( ) ).
-            client->view_show( 'SECOND' ).
+            client->show_view( 'SECOND' ).
 
           WHEN 'CALL_NEW_APP_READ'.
             DATA(lo_app_next) = NEW z2ui5_cl_app_demo_25( ).
@@ -56,24 +54,27 @@ CLASS Z2UI5_CL_APP_DEMO_24 IMPLEMENTATION.
       WHEN client->cs-lifecycle_method-on_rendering.
 
         DATA(view) = client->factory_view( ).
-        view->page( title = 'abap2UI5 - flow logic 1' navbuttontap = view->_event( 'BACK' )
-           )->header_content( )->link( text = 'Go to Source Code' href = client->get( )-s_request-url_source_code )->get_parent(
+        view->page( title = 'abap2UI5 - flow logic - APP 01' navbuttonpress = client->_event( 'BACK' )
+            )->header_content(
+                )->link( text = 'Demo'        href = `https://twitter.com/OblomovDev/status/1640743794206228480`
+                )->link( text = 'Source_Code' href = client->get( )-s_request-url_source_code
+            )->get_parent(
 
            )->grid( 'L6 M12 S12' )->content( 'l'
 
            )->simple_form( 'Controller' )->content( 'f'
 
              )->label( 'Demo'
-             )->button( text = 'call new app (default View)' press = view->_event( 'CALL_NEW_APP' )
+             )->button( text = 'call new app (first View)' press = client->_event( 'CALL_NEW_APP' )
              )->label( 'Demo'
-             )->button( text = 'call new app with view SECOND' press = view->_event( 'CALL_NEW_APP_VIEW' )
+             )->button( text = 'call new app (second View)' press = client->_event( 'CALL_NEW_APP_VIEW' )
              )->label( 'Demo'
-             )->button( text = 'call new app and set event' press = view->_event( 'CALL_NEW_APP_EVENT' )
-             )->label( 'call new app and set this data'
-             )->input( view->_bind( mv_input )
-             )->button( text = 'call' press = view->_event( 'CALL_NEW_APP_READ' )
+             )->button( text = 'call new app (set Event)' press = client->_event( 'CALL_NEW_APP_EVENT' )
+             )->label( 'Demo'
+             )->input( client->_bind( mv_input )
+             )->button( text = 'call new app (set data)' press = client->_event( 'CALL_NEW_APP_READ' )
                   )->label( 'some data, you can read it in the next app'
-             )->input( view->_bind( mv_input2 )
+             )->input( client->_bind( mv_input2 )
         ).
 
     ENDCASE.

@@ -97,7 +97,7 @@
    CLASS ltc_interpreter IMPLEMENTATION.
 
      METHOD new_interpreter.
-       mo_port ?= lcl_lisp_new=>port( iv_port_type = textual
+       mo_port ?= lcl_lisp_new=>port( iv_port_type = c_port_textual
                                       iv_input  = abap_false
                                       iv_output = abap_true
                                       iv_error  = abap_true
@@ -158,12 +158,12 @@
 
      METHOD closing_1.
        scheme( code = '( + 1'
-               expected = |Parse: missing a ) to close expression| ).
+               expected = `Parse: missing a ) to close expression` ).
      ENDMETHOD.                    "closing_1
 
      METHOD closing_2.
        scheme( code = '(let ([x 3)] (* x x))'
-               expected = |Parse: a ) found while ] expected| ).
+               expected = `Parse: a ) found while ] expected` ).
      ENDMETHOD.                    "closing_2
 
      METHOD stability_1.
@@ -261,13 +261,12 @@
      ENDMETHOD.                    "teardown
 
      METHOD parse.
-       DATA elements TYPE lcl_lisp_interpreter=>tt_element.
        DATA element TYPE REF TO lcl_lisp.
 
-       elements = mo_int->parse( code ).
+       DATA(elements) = mo_int->parse( code ).
        cl_abap_unit_assert=>assert_not_initial(
          act = lines( elements )
-         msg = |No evaluated element from first expression| ).
+         msg = `No evaluated element from first expression` ).
 
        LOOP AT elements INTO element.
          mo_port->write( element ).
@@ -1154,7 +1153,7 @@
    CLASS ltc_string IMPLEMENTATION.
 
      METHOD setup.
-       mo_port ?= lcl_lisp_new=>port( iv_port_type = textual
+       mo_port ?= lcl_lisp_new=>port( iv_port_type = c_port_textual
                                       iv_input  = abap_false
                                       iv_output = abap_true
                                       iv_error  = abap_true
