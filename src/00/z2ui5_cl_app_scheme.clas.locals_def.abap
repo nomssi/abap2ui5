@@ -215,3 +215,6 @@ ENDINTERFACE.
   CONSTANTS:
     c_real_types   TYPE string VALUE 'NrR',  " type_integer && type_rational && type_real
     c_number_types TYPE string VALUE 'NrRz'. " type_integer && type_rational && type_real && type_complex
+
+  CONSTANTS:
+    c_value_false TYPE string VALUE `#f`.

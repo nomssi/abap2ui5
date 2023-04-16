@@ -1,79 +1,67 @@
 INTERFACE z2ui5_if_client
   PUBLIC .
 
-  CONSTANTS:
-    BEGIN OF cs,
-      BEGIN OF lifecycle_method,
-        on_event     TYPE string VALUE 'EVENT',
-        on_rendering TYPE string VALUE 'RENDERING',
-      END OF lifecycle_method,
-    END OF cs.
-
-    TYPES:
-      BEGIN OF ty_s_name_value,
-        name  TYPE string,
-        value TYPE string,
-      END OF ty_s_name_value.
-    TYPES ty_t_name_value TYPE STANDARD TABLE OF ty_s_name_value WITH EMPTY KEY.
-
   TYPES:
-    BEGIN OF ty_s_cursor,
-      id             TYPE string,
-      cursorpos      TYPE string,
-      selectionstart TYPE string,
-      selectionend   TYPE string,
-    END OF ty_s_cursor.
+    BEGIN OF ty_s_name_value,
+      name  TYPE string,
+      value TYPE string,
+    END OF ty_s_name_value.
+  TYPES ty_t_name_value TYPE STANDARD TABLE OF ty_s_name_value WITH EMPTY KEY.
 
   TYPES:
     BEGIN OF ty_s_get,
-      view_active        TYPE string,
-      popup_active       TYPE string,
-      check_previous_app TYPE abap_bool,
-      event              TYPE string,
-      page_scroll_pos    TYPE i,
-      lifecycle_method   TYPE string,
-      id                 TYPE string,
-      id_prev            TYPE string,
-      id_prev_app        TYPE string,
-      id_prev_app_stack  TYPE string,
-      BEGIN OF s_request,
-        tenant          TYPE string,
-        url_app         TYPE string,
-        url_app_gen     TYPE string,
-        origin          TYPE string,
-        url_source_code TYPE string,
-      END OF s_request,
+      event             TYPE string,
+      event_data        TYPE string,
+      id                TYPE string,
+      id_prev           TYPE string,
+      id_prev_app       TYPE string,
+      id_prev_app_stack TYPE string,
+      t_req_param       type ty_t_name_value,
+      t_req_header      type ty_t_name_value,
     END OF ty_s_get.
 
+  TYPES:
+    BEGIN OF ty_S_next,
+      xml_main            TYPE string,
+      xml_popup           TYPE string,
+      popup_open_by_id    type string,
+      check_set_prev_view TYPE abap_bool,
+      t_scroll_pos        TYPE ty_t_name_value,
+      BEGIN OF s_cursor_pos,
+        id             TYPE string,
+        cursorpos      TYPE string,
+        selectionstart TYPE string,
+        selectionend   TYPE string,
+      END OF s_cursor_pos,
+      begin of s_timer,
+        interval_ms    type string,
+        event_finished type string,
+      end of s_timer,
+    END OF ty_s_next.
 
-  METHODS set
+  METHODS set_next
     IMPORTING
-      event         TYPE clike OPTIONAL
-      t_scroll_pos  TYPE ty_t_name_value OPTIONAL
-      s_cursor_pos  TYPE ty_s_cursor OPTIONAL
-      set_prev_view TYPE abap_bool OPTIONAL.
+      val TYPE ty_S_next.
 
   METHODS get
     RETURNING
       VALUE(result) TYPE ty_s_get.
 
-  METHODS get_app_by_id
+  METHODS get_app
     IMPORTING
       id            TYPE clike
     RETURNING
       VALUE(result) TYPE REF TO z2ui5_if_app.
 
-
   METHODS nav_app_leave
     IMPORTING
-      id TYPE clike.
+      app type ref to z2ui5_if_app.
 
   METHODS nav_app_call
     IMPORTING
       app TYPE REF TO z2ui5_if_app.
 
   METHODS nav_app_home.
-
 
   METHODS popup_message_box
     IMPORTING
@@ -84,36 +72,20 @@ INTERFACE z2ui5_if_client
     IMPORTING
       text TYPE string.
 
-
-  METHODS show_view
-    IMPORTING
-      val               TYPE clike OPTIONAL
-      check_no_rerender TYPE abap_bool DEFAULT abap_false
-        PREFERRED PARAMETER val.
-
-  METHODS popup_view
-    IMPORTING
-      name TYPE clike.
-
-
-  METHODS factory_view
-    IMPORTING
-      name          TYPE string OPTIONAL
-    RETURNING
-      VALUE(result) TYPE REF TO z2ui5_if_view.
-
   METHODS _bind
     IMPORTING
-      val           TYPE data
+      val            TYPE data
+      path           TYPE abap_bool DEFAULT abap_false
+      check_gen_data type abap_bool OPTIONAL
     RETURNING
       VALUE(result) TYPE string.
 
-  METHODS _bind_one_way
+  METHODS _bind_one
     IMPORTING
       val           TYPE data
+      path          TYPE abap_bool DEFAULT abap_false
     RETURNING
       VALUE(result) TYPE string.
-
 
   METHODS _event
     IMPORTING
@@ -124,4 +96,5 @@ INTERFACE z2ui5_if_client
   METHODS _event_close_popup
     RETURNING
       VALUE(result) TYPE string.
+
 ENDINTERFACE.

@@ -9,27 +9,36 @@ CLASS z2ui5_cl_app_scheme DEFINITION
 " User events such as button clicks are used to UI in response to the user's actions.
     INTERFACES z2ui5_if_app .
 
+    TYPES: BEGIN OF ts_screen,
+            code_area         TYPE string,
+            input_area        TYPE string,
+            console_area      TYPE string,
+            output_area       TYPE string,
+
+            path TYPE string,
+            input_port_state TYPE string,
+
+            log TYPE string,
+            output TYPE string,
+
+            port TYPE REF TO if_serializable_object,
+            input_port TYPE REF TO if_serializable_object,
+            output_port TYPE REF TO if_serializable_object,
+            interpreter TYPE REF TO if_serializable_object,
+            environment TYPE REF TO if_serializable_object,
+            code_stack TYPE string_table,
+            stack TYPE REF TO if_serializable_object,
+           END OF ts_screen.
+    DATA client TYPE REF TO z2ui5_if_client.
     DATA:
-      BEGIN OF screen, " Store the state of the class, to be passed between the methods
+      BEGIN OF app, " Store the state of the class, to be passed between the methods
         check_initialized TYPE abap_bool,
-        code_area         TYPE string,
-        input_area        TYPE string,
-        console_area      TYPE string,
-        output_area       TYPE string,
-
-        path TYPE string,
-
-        log TYPE string,
-        output TYPE string,
-
-        port TYPE REF TO if_serializable_object,
-        input_port TYPE REF TO if_serializable_object,
-        output_port TYPE REF TO if_serializable_object,
-        interpreter TYPE REF TO if_serializable_object,
-        environment TYPE REF TO if_serializable_object,
-        code_stack TYPE string_table,
-        stack TYPE REF TO if_serializable_object,
-      END OF screen.
+        view_main         TYPE string,
+        view_popup        TYPE string,
+        get               TYPE z2ui5_if_client=>ty_s_get,
+        next              TYPE z2ui5_if_client=>ty_s_next,
+      END OF app.
+    DATA screen TYPE ts_screen.
 
   PROTECTED SECTION.
     METHODS init IMPORTING client TYPE REF TO z2ui5_if_client.
@@ -38,8 +47,11 @@ CLASS z2ui5_cl_app_scheme DEFINITION
     METHODS trace IMPORTING client TYPE REF TO z2ui5_if_client.
     METHODS format_all.
     METHODS sample_code RETURNING VALUE(result) TYPE string.
-    METHODS view_popup_input IMPORTING i_descr TYPE string
-                                       i_client TYPE REF TO z2ui5_if_client.
+
+    METHODS z2ui5_on_init.
+    METHODS z2ui5_on_event.
+    METHODS z2ui5_on_render_main RETURNING VALUE(result) TYPE string.
+    METHODS z2ui5_on_render_popup RETURNING VALUE(result) TYPE string.
   PRIVATE SECTION.
 
     METHODS reset.
@@ -67,8 +79,8 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
                            client = client ).
     format_all( ).
     reset( ).
-    client->set( t_scroll_pos = VALUE #( ( name = 'id_console' value = '99999' )
-                                         ( name = 'id_output' value = '99999' ) ) ).
+    app-next-t_scroll_pos = VALUE #( ( name = 'id_console' value = '99999' )
+                                     ( name = 'id_output' value = '99999' ) ).
   ENDMETHOD.
 
 
@@ -79,10 +91,12 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
 
 
   METHOD init.
+    app-check_initialized = abap_true.
     CLEAR screen.
-    screen-check_initialized = abap_true.
     refresh_scheme( client ).
     screen-code_area = sample_code( ).
+    CALL FUNCTION 'Y2UI5_GET_STATE'
+      IMPORTING ev_state = screen-input_port_state.
   ENDMETHOD.
 
 
@@ -228,9 +242,137 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD view_popup_input.
+  METHOD Z2UI5_ON_EVENT.
+    CHECK app-get-event IS NOT INITIAL.
 
-    DATA(view) = i_client->factory_view( 'POPUP_TO_INPUT' ).
+    CASE app-get-event.
+
+      WHEN 'BACK'.
+        client->nav_app_leave( client->get_app( client->get( )-id_prev_app_stack ) ).
+
+      WHEN 'DB_LOAD'.
+        " screen-code_area
+        client->popup_message_toast( 'Download successfull' ).
+
+      WHEN 'DB_SAVE'.
+        "lcl_mime_api=>save_data( ).
+        client->popup_message_box( text = 'Upload successfull. File saved!' type = 'success' ).
+
+      WHEN 'BUTTON_RESET'.
+        refresh_scheme( client ).
+
+      WHEN 'SCHEME_INPUT_RETURN'.
+        DATA(lo_reader) = CAST z2ui5_cl_app_scheme_reader( client->get_app( client->get( )-id_prev_app ) ).
+        screen-input_area = lo_reader->mv_input.
+        CALL FUNCTION 'Y2UI5_CLOSE_POPUP'.  " end await process
+        CALL FUNCTION 'Y2UI5_GET_STATE'
+          IMPORTING ev_state = screen-input_port_state.
+
+      WHEN 'BUTTON_INPUT_CONFIRM'.
+        "lcl_lisp_port=>last_input = screen-input_area.
+
+      WHEN 'BUTTON_INPUT_CANCEL'.
+        CLEAR screen-input_area.
+
+      WHEN 'BUTTON_PREV'.
+        screen-code_area = CAST lcl_stack( screen-stack )->previous( ).
+
+      WHEN 'BUTTON_NEXT'.
+        screen-code_area = CAST lcl_stack( screen-stack )->next( ).
+
+      WHEN 'BUTTON_TRACE'.
+        trace( client ).
+
+      WHEN 'BUTTON_SEXP'.
+
+      WHEN 'BUTTON_EVAL'.
+        evaluate( client ).
+
+    ENDCASE.
+  ENDMETHOD.
+
+  METHOD Z2UI5_ON_INIT.
+    init( client ).
+    app-view_main = 'VIEW_MAIN'.
+  ENDMETHOD.
+
+  METHOD Z2UI5_ON_RENDER_MAIN.
+    "DATA(view) = client->factory_view( 'ABAP_SCHEME' ).
+
+    DATA(page) = z2ui5_cl_xml_view=>factory( )->shell(
+              )->page(
+                   id = 'id_page'
+                   title = 'abapScheme - Workbench'
+                   shownavbutton = abap_true
+                   navbuttonpress = client->_event( 'BACK' ) ).
+
+    page->header_content(
+      )->overflow_toolbar(
+        )->button(
+            text  = 'Evaluate'
+            press = client->_event( 'BUTTON_EVAL' )
+            icon = 'sap-icon://begin'
+            type    = 'Emphasized'
+        )->toolbar_spacer(
+        )->button( text = 'S-Expression' press = client->_event( 'BUTTON_SEXP' )
+                   icon = 'sap-icon://tree'
+        )->button( text = 'Trace' press = client->_event( 'BUTTON_TRACE' )
+                    icon = 'sap-icon://step'
+        )->button(
+             text = 'Previous'
+             press = client->_event( 'BUTTON_PREV' )
+             icon  = 'sap-icon://navigation-left-arrow'
+        )->button(
+             text = 'Next'
+             press = client->_event( 'BUTTON_NEXT' )
+             icon  = 'sap-icon://navigation-right-arrow'
+        )->button(
+             text = 'Refresh'
+             type  = 'Reject'
+             press = client->_event( 'BUTTON_RESET' )
+             icon  = 'sap-icon://delete'
+        )->link( text = 'Help on..' href = 'https://github.com/nomssi/abap_scheme/wiki'
+                 " icon  = 'sap-icon://learning-assistant' // 'sap-icon://sys-help'
+       )->get_parent( ).
+
+
+    DATA(grid) = page->grid( 'L12 M12 S12' )->content( 'layout' ).
+
+    grid->simple_form( 'Code Editor - Untitled' )->content( 'form'
+        )->code_editor( value = client->_bind( screen-code_area )
+                        type = 'scheme'
+                        editable = abap_true
+                        height = '200px' ).
+
+    grid->simple_form( 'Input' )->content( 'form'
+         )->input( id = 'id_input'
+                   showClearIcon = abap_true
+                   value = client->_bind( screen-input_area )
+         )->button(
+              text  = 'Confirm'
+              press = client->_event( 'BUTTON_INPUT_CONFIRM' )
+              type  = 'Emphasized' ).
+
+    grid->simple_form( )->content( 'form'
+        )->text_area( value = client->_bind( screen-output_area )
+                      id = 'id_output'
+                      width = '100%'
+                      height = '200px' ).
+
+    grid->simple_form( 'Console' )->content( 'form'
+      )->text_area( value = client->_bind( screen-console_area )
+                    id = 'id_console'
+                    width = '100%'
+                    height = '200px' ).
+
+
+    result = page->get_root( )->xml_get( ).
+
+  ENDMETHOD.
+
+  METHOD Z2UI5_ON_RENDER_POPUP.
+
+    DATA(view) = z2ui5_cl_xml_view=>factory( ).
     DATA(popup) = view->dialog(
                     contentwidth  = '500px'
                     title = 'Scheme Input Dialog'
@@ -238,139 +380,54 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
 
     popup->content(
         )->simple_form(
-        )->label( i_descr
+        )->label( 'Enter value'
         )->input( id = 'id_input'
                   showClearIcon = abap_true
-                  value = i_client->_event( screen-input_area ) ).
+                  value = client->_event( screen-input_area ) ).
 
     popup->footer( )->overflow_toolbar(
           )->toolbar_spacer(
           )->button(
               text  = 'Cancel'
-              press = i_client->_event( 'BUTTON_INPUT_CANCEL' )
+              press = client->_event( 'BUTTON_INPUT_CANCEL' )
           )->button(
               text  = 'Confirm'
-              press = i_client->_event( 'BUTTON_INPUT_CONFIRM' )
+              press = client->_event( 'BUTTON_INPUT_CONFIRM' )
               type  = 'Emphasized' ).
+    result = popup->get_root( )->xml_get( ).
+
   ENDMETHOD.
 
 
   METHOD z2ui5_if_app~controller.
 
-    CASE client->get( )-lifecycle_method.
+    me->client     = client.
+    app-get        = client->get( ).
+    app-view_popup = ``.
 
-      WHEN client->cs-lifecycle_method-on_event.
+    IF app-check_initialized EQ abap_false.
+      app-check_initialized = abap_true.
+      z2ui5_on_init( ).
+    ENDIF.
 
-        IF screen-check_initialized EQ abap_false.
-          init( client ).
-        ENDIF.
+    z2ui5_on_event( ).
 
-        CASE client->get( )-event.
-
-          WHEN 'BACK'.
-            client->nav_app_leave( client->get( )-id_prev_app_stack ).
-
-          WHEN 'DB_LOAD'.
-            " screen-code_area
-            client->popup_message_toast( 'Download successfull' ).
-
-          WHEN 'DB_SAVE'.
-            "lcl_mime_api=>save_data( ).
-            client->popup_message_box( text = 'Upload successfull. File saved!' type = 'success' ).
-
-          WHEN 'BUTTON_RESET'.
-            refresh_scheme( client ).
-
-          WHEN 'SCHEME_INPUT_RETURN'.
-            DATA(lo_reader) = CAST z2ui5_cl_app_scheme_reader( client->get_app_by_id( client->get( )-id_prev_app ) ).
-            screen-input_area = lo_reader->mv_input.
-            CALL FUNCTION 'Y2UI5_CLOSE_POPUP'.
-
-          WHEN 'BUTTON_INPUT_CONFIRM'.
-            "lcl_lisp_port=>last_input = screen-input_area.
-
-          WHEN 'BUTTON_INPUT_CANCEL'.
-            CLEAR screen-input_area.
-
-          WHEN 'BUTTON_PREV'.
-            screen-code_area = CAST lcl_stack( screen-stack )->previous( ).
-
-          WHEN 'BUTTON_NEXT'.
-            screen-code_area = CAST lcl_stack( screen-stack )->next( ).
-
-          WHEN 'BUTTON_TRACE'.
-            trace( client ).
-
-          WHEN 'BUTTON_SEXP'.
-
-          WHEN 'BUTTON_EVAL'.
-            evaluate( client ).
-
-        ENDCASE.
-
-
-
-      WHEN client->cs-lifecycle_method-on_rendering.
-
-        DATA(view) = client->factory_view( 'ABAP_SCHEME' ).
-        DATA(page) = view->page(
-                       id = 'id_page'
-                       title = 'abapScheme - Workbench'
-                       navbuttonpress = client->_event( 'BACK' ) ).
-
-        page->header_content( )->overflow_toolbar(
-            )->button(
-                text  = 'Evaluate'
-                press = client->_event( 'BUTTON_EVAL' )
-                icon = 'sap-icon://begin'
-                type    = 'Emphasized'
-            )->toolbar_spacer(
-            )->button( text = 'S-Expression' press = client->_event( 'BUTTON_SEXP' )
-                       icon = 'sap-icon://tree'
-            )->button( text = 'Trace' press = client->_event( 'BUTTON_TRACE' )
-                        icon = 'sap-icon://step'
-            )->button(
-                 text = 'Previous'
-                 press = client->_event( 'BUTTON_PREV' )
-                 icon  = 'sap-icon://navigation-left-arrow'
-            )->button(
-                 text = 'Next'
-                 press = client->_event( 'BUTTON_NEXT' )
-                 icon  = 'sap-icon://navigation-right-arrow'
-            )->button(
-                 text = 'Refresh'
-                 type  = 'Reject'
-                 press = client->_event( 'BUTTON_RESET' )
-                 icon  = 'sap-icon://delete'
-            )->link( text = 'Help on..' href = 'https://github.com/nomssi/abap_scheme/wiki'
-                     " icon  = 'sap-icon://learning-assistant' // 'sap-icon://sys-help'
-                 ).
-
-
-        DATA(grid) = page->grid( 'L12 M12 S12' )->content( 'l' ).
-
-        grid->simple_form( 'Code Editor - Untitled' )->content( 'f'
-            )->code_editor( value = client->_bind( screen-code_area )
-                            type = 'scheme'
-                            editable = abap_true
-                            height = '200px' ).
-
-        grid->simple_form( )->content( 'f'
-            )->text_area( value = client->_bind( screen-output_area )
-                          id = 'id_output'
-                          width = '100%'
-                          height = '200px' ).
-
-        grid->simple_form( 'Console' )->content( 'f'
-          )->text_area( value = client->_bind( screen-console_area )
-                        id = 'id_console'
-                        width = '100%'
-                        height = '200px' ).
-
-
-       view_popup_input( i_descr = 'Input'
-                         i_client = client ).
-
+    "view rendering
+    CASE app-view_main.
+      WHEN 'VIEW_MAIN'.
+      app-next-xml_main = z2ui5_on_render_main( ).
     ENDCASE.
+
+    CASE app-view_popup.
+      WHEN 'VIEW_POPUP'.
+      app-next-xml_popup = z2ui5_on_render_popup( ).
+    ENDCASE.
+
+    client->set_next( app-next ).
+    CLEAR app-get.
+    CLEAR app-next.
+
+
   ENDMETHOD.
+
 ENDCLASS.

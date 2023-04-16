@@ -1,4 +1,4 @@
-FUNCTION Y2UI5_ASYNC_POPUP.
+FUNCTION y2ui5_async_popup.
 *"----------------------------------------------------------------------
 *"*"Local Interface:
 *"  IMPORTING
@@ -10,6 +10,7 @@ FUNCTION Y2UI5_ASYNC_POPUP.
   TRY.
 
     state = c_state_pending.
+
 
   CATCH cx_root.
     state = c_state_rejected.

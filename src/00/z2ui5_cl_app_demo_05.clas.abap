@@ -23,6 +23,18 @@ CLASS z2ui5_cl_app_demo_05 DEFINITION PUBLIC.
         text_area         TYPE string,
       END OF screen.
 
+
+    types:
+       begin of ty_s_token,
+            key   type string,
+            text  type string,
+            visible  type abap_bool,
+            selkz type abap_bool,
+       end of ty_S_token.
+
+    data mt_token            type STANDARD TABLE OF ty_S_token with empty key.
+    data mt_token_sugg       type STANDARD TABLE OF ty_S_token with empty key.
+
   PROTECTED SECTION.
   PRIVATE SECTION.
 ENDCLASS.
@@ -34,12 +46,21 @@ CLASS Z2UI5_CL_APP_DEMO_05 IMPLEMENTATION.
 
   METHOD z2ui5_if_app~controller.
 
-    CASE client->get( )-lifecycle_method.
-
-      WHEN client->cs-lifecycle_method-on_event.
-
         IF screen-check_initialized = abap_false.
           screen-check_initialized = abap_true.
+
+            mt_token = value #(
+                ( key = 'VAL1' text = 'value_1' selkz = abap_true  visible = abap_true )
+                ( key = 'VAL3' text = 'value_3' selkz = abap_false visible = abap_true )
+                ( key = 'VAL4' text = 'value_4' selkz = abap_true )
+            ).
+
+            mt_token_sugg = value #(
+                ( key = 'VAL1' text = 'value_1' )
+                ( key = 'VAL2' text = 'value_2' )
+                ( key = 'VAL3' text = 'value_3' )
+                ( key = 'VAL4' text = 'value_4' )
+            ).
 
           screen = VALUE #(
              check_initialized = abap_true
@@ -52,7 +73,6 @@ CLASS Z2UI5_CL_APP_DEMO_05 IMPLEMENTATION.
              time_start        = '05:24:00'
              time_end          = '17:23:57' ).
 
-          RETURN.
         ENDIF.
 
 
@@ -67,30 +87,27 @@ CLASS Z2UI5_CL_APP_DEMO_05 IMPLEMENTATION.
               type = 'success' ).
 
           WHEN 'BACK'.
-            client->nav_app_leave( client->get( )-id_prev_app_stack ).
+            client->nav_app_leave( client->get_app( client->get( )-id_prev_app_stack ) ).
 
         ENDCASE.
 
-
-      WHEN client->cs-lifecycle_method-on_rendering.
-
-        DATA(page) = client->factory_view(
+        DATA(page) = Z2UI5_CL_XML_VIEW=>factory( )->shell(
             )->page(
-                title          = 'abap2UI5 - Selection-Screen more Controls'
-                navbuttonpress = client->_event( 'BACK' )
-                class = `class="sapUiContentPadding sapUiResponsivePadding--header sapUiResponsivePadding--subHeader sapUiResponsivePadding--content sapUiResponsivePadding--footer"`
+                    title          = 'abap2UI5 - Selection-Screen more Controls'
+                    navbuttonpress = client->_event( 'BACK' )
+                      shownavbutton = abap_true
                 )->header_content(
                     )->link(
-                        text = 'Source_Code'
-                        href = client->get( )-s_request-url_source_code
+                        text = 'Source_Code'  target = '_blank'
+                        href = Z2UI5_CL_XML_VIEW=>hlp_get_source_code_url( app = me get = client->get( ) )
                 )->get_parent( ).
 
         page->generic_tag(
-            arialabelledby = 'genericTagLabel'
-            text           = 'Project Cost'
-            design         = 'StatusIconHidden'
-            status         = 'Error'
-            class          = 'sapUiSmallMarginBottom'
+                arialabelledby = 'genericTagLabel'
+                text           = 'Project Cost'
+                design         = 'StatusIconHidden'
+                status         = 'Error'
+                class          = 'sapUiSmallMarginBottom'
             )->object_number(
                 state      = 'Error'
                 emphasized = 'false'
@@ -119,9 +136,9 @@ CLASS Z2UI5_CL_APP_DEMO_05 IMPLEMENTATION.
                 number     = '3.5M'
                 unit       = 'EUR' ).
 
-        DATA(grid) = page->grid( 'L12 M12 S12' )->content( 'l' ).
+        DATA(grid) = page->grid( 'L12 M12 S12' )->content( 'layout' ).
 
-        grid->simple_form( 'More Controls' )->content( 'f'
+        grid->simple_form( 'More Controls' )->content( 'form'
             )->label( 'ProgressIndicator'
             )->progress_indicator(
                 percentvalue    = screen-progress_value
@@ -149,9 +166,25 @@ CLASS Z2UI5_CL_APP_DEMO_05 IMPLEMENTATION.
                 showtickmarks = abap_true
                 labelinterval = '2'
                 width         = '80%'
-                class         = 'sapUiTinyMargin' ).
+                class         = 'sapUiTinyMargin'
+            )->label( 'MultiInput'
+            )->multi_input(
+                    tokens = client->_bind( mt_token )
+                    showclearicon   = abap_true
+                    showvaluehelp   = abap_true
+                    suggestionitems = client->_bind( mt_token_sugg )
+                )->item(
+                        key = `{KEY}`
+                        text = `{TEXT}`
+                )->tokens(
+                    )->token(
+                        key = `{KEY}`
+                        text = `{TEXT}`
+                        selected = `{SELKZ}`
+                        visible = `{VISIBLE}`
+        ).
 
-        grid->simple_form( 'Text Area' )->content( 'f'
+        grid->simple_form( 'Text Area' )->content( 'form'
             )->label( 'text area'
             )->text_area(
                 value = `Lorem ipsum dolor st amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magn` &&
@@ -198,7 +231,7 @@ CLASS Z2UI5_CL_APP_DEMO_05 IMPLEMENTATION.
                     press = client->_event( 'BUTTON_SEND' )
                     type  = 'Success' ).
 
-    ENDCASE.
+      client->set_next( value #( xml_main = page->get_root(  )->xml_get( ) ) ).
 
   ENDMETHOD.
 ENDCLASS.

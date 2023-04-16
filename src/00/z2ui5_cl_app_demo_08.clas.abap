@@ -18,10 +18,6 @@ CLASS Z2UI5_CL_APP_DEMO_08 IMPLEMENTATION.
 
   METHOD z2ui5_if_app~controller.
 
-    CASE client->get( )-lifecycle_method.
-
-      WHEN client->cs-lifecycle_method-on_event.
-
         CASE client->get( )-event.
 
           WHEN 'BUTTON_MESSAGE_BOX'.
@@ -52,21 +48,19 @@ CLASS Z2UI5_CL_APP_DEMO_08 IMPLEMENTATION.
             strip_type = 'Success'.
 
           WHEN 'BACK'.
-            client->nav_app_leave( client->get( )-id_prev_app_stack ).
+            client->nav_app_leave( client->get_app( client->get( )-id_prev_app_stack ) ).
 
         ENDCASE.
 
-
-      WHEN client->cs-lifecycle_method-on_rendering.
-
-        DATA(page) = client->factory_view( 'MAIN'
+        DATA(page) = Z2UI5_CL_XML_VIEW=>factory( )->shell(
             )->page(
                 title          = 'abap2UI5 - Messages'
                 navbuttonpress = client->_event( 'BACK' )
+                  shownavbutton = abap_true
                 )->header_content(
                     )->link(
-                        text = 'Source_Code'
-                        href = client->get( )-s_request-url_source_code
+                        text = 'Source_Code'  target = '_blank'
+                        href = Z2UI5_CL_XML_VIEW=>hlp_get_source_code_url( app = me get = client->get( ) )
                 )->get_parent( ).
 
         IF check_strip_active = abap_true.
@@ -74,8 +68,8 @@ CLASS Z2UI5_CL_APP_DEMO_08 IMPLEMENTATION.
         ENDIF.
 
         page->grid( 'L6 M12 S12'
-            )->content( 'l'
-                )->simple_form( 'Message Box' )->content( 'f'
+            )->content( 'layout'
+                )->simple_form( 'Message Box' )->content( 'form'
                     )->button(
                         text  = 'information'
                         press = client->_event( 'BUTTON_MESSAGE_BOX' )
@@ -90,8 +84,8 @@ CLASS Z2UI5_CL_APP_DEMO_08 IMPLEMENTATION.
                         press = client->_event( 'BUTTON_MESSAGE_BOX_WARNING' ) ).
 
         page->grid( 'L6 M12 S12'
-            )->content( 'l'
-                )->simple_form( 'Message Strip' )->content( 'f'
+            )->content( 'layout'
+                )->simple_form( 'Message Strip' )->content( 'form'
                     )->button(
                         text = 'success'
                         press = client->_event( 'BUTTON_MESSAGE_STRIP_SUCCESS' )
@@ -103,14 +97,12 @@ CLASS Z2UI5_CL_APP_DEMO_08 IMPLEMENTATION.
                         press = client->_event( 'BUTTON_MESSAGE_STRIP_INFO' ) ).
 
         page->grid( 'L6 M12 S12'
-            )->content( 'l'
-                )->simple_form( 'Display' )->content( 'f'
+            )->content( 'layout'
+                )->simple_form( 'Display' )->content( 'form'
                     )->button(
                         text = 'Message Toast'
                         press = client->_event( 'BUTTON_MESSAGE_TOAST' ) ).
 
-
-    ENDCASE.
-
+        client->set_next( value #( xml_main = page->get_root(  )->xml_get( ) ) ).
   ENDMETHOD.
 ENDCLASS.
