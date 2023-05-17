@@ -399,7 +399,7 @@ CLASS Z2UI5_CL_APP_SCHEME IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD z2ui5_if_app~controller.
+  METHOD z2ui5_if_app~main.
 
     me->client     = client.
     app-get        = client->get( ).
